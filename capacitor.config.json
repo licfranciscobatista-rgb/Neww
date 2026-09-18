@@ -1,0 +1,8 @@
+{
+  "appId": "com.ajedrez.maia",
+  "appName": "Jugada Offline",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

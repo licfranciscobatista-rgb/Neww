@@ -4,13 +4,15 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+export default defineConfig(({mode}) => {
   return {
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        // En el APK los archivos van empaquetados: no se registra el service worker.
+        injectRegister: mode === 'apk' ? false : 'auto',
         includeAssets: [
           'favicon.ico',
           'apple-touch-icon.png',
