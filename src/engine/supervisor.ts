@@ -12,7 +12,8 @@ import { realStockfish } from './realStockfish';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
-import { controlDirector } from './controlDirector';
+import { runChessJsRecommendation } from './chessjsEngine';
+import { controlDirector, subDirector } from './controlDirector';
 import { loadGameRecords } from '../storage/chessStorage';
 
 export interface SupervisorState {
@@ -56,6 +57,7 @@ export class ChessSupervisor {
         garbo: null,
         maia: null,
         personal: null,
+        chessjs: null,
       },
       candidateArrows: [],
       loadingStates: {
@@ -63,6 +65,7 @@ export class ChessSupervisor {
         garbo: false,
         maia: false,
         personal: false,
+        chessjs: false,
       },
       thinkingTime: null,
       agreements: [],
@@ -76,6 +79,9 @@ export class ChessSupervisor {
   }
 
   public resetForNewGame(gameId: string): void {
+    // Consulta ultra-rápida de preparación al Subdirector (<0.1ms)
+    subDirector.consultReadiness();
+
     this.state = {
       ...this.state,
       gameId,
@@ -91,6 +97,7 @@ export class ChessSupervisor {
         garbo: null,
         maia: null,
         personal: null,
+        chessjs: null,
       },
       candidateArrows: [],
       agreements: [],
@@ -137,6 +144,7 @@ export class ChessSupervisor {
           garbo: null,
           maia: null,
           personal: null,
+          chessjs: null,
         },
       };
       this.onStateChange(this.state);
@@ -165,6 +173,7 @@ export class ChessSupervisor {
           garbo: null,
           maia: null,
           personal: null,
+          chessjs: null,
         },
         agreements: [],
       };
@@ -235,15 +244,33 @@ export class ChessSupervisor {
     let personalRec: EngineRecommendation | null = null;
     if (personalStatus.isUnlocked) {
       const pStart = performance.now();
-      personalRec = runPersonalRecommendation({
-        chess,
-        profile,
-        games: storedGames,
-      });
+      try {
+        personalRec = runPersonalRecommendation({
+          chess,
+          profile,
+          games: storedGames,
+        });
+      } catch (pErr) {
+        console.warn('[Supervisor] Fallback seguro en Motor Personal:', pErr);
+        personalRec = null;
+      }
       controlDirector.watchEngineExecution('personal', performance.now() - pStart);
     }
 
+    // 5. Motor Chess.js: Identifica el tablero por FEN y busca una jugada dudosa (~ -1.00)
+    // REGLA ESTRICTA DEL USUARIO: "pero sin flecha" -> NO se dibuja flecha para Chess.js en el tablero
+    const otherEngineMoves: string[] = [];
+    if (stockfishRec?.move) otherEngineMoves.push(stockfishRec.move);
+    if (garboRec?.move) otherEngineMoves.push(garboRec.move);
+    if (maiaRec?.move) otherEngineMoves.push(maiaRec.move);
+    if (personalRec?.move) otherEngineMoves.push(personalRec.move);
+
+    const cjsStart = performance.now();
+    const chessjsRec = runChessJsRecommendation(chess, otherEngineMoves);
+    controlDirector.watchEngineExecution('chessjs', performance.now() - cjsStart);
+
     // Compute candidate arrows for active engines
+    // NOTA: Únicamente Stockfish, Garbo, Maia y Personal generan flechas; Chess.js es SIN flecha
     const arrows: CandidateArrow[] = [];
 
     if (stockfishRec && stockfishRec.move) {
@@ -333,12 +360,14 @@ export class ChessSupervisor {
         garbo: garboRec,
         maia: maiaRec,
         personal: personalRec,
+        chessjs: chessjsRec,
       },
       loadingStates: {
         stockfish: false,
         garbo: false,
         maia: false,
         personal: false,
+        chessjs: false,
       },
     };
 

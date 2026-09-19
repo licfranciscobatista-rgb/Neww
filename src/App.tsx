@@ -11,6 +11,7 @@ import {
   Smartphone,
   Wifi,
   WifiOff,
+  Clock,
 } from 'lucide-react';
 import {
   GameAnalysisReport,
@@ -27,11 +28,13 @@ import {
   saveGameRecord,
   loadAnalysisReports,
   saveAnalysisReport,
+  computeProfileFromGames,
 } from './storage/chessStorage';
 import { ChessSupervisor, SupervisorState } from './engine/supervisor';
 import { runStockfishRecommendation } from './engine/stockfishEngine';
 import { realStockfish } from './engine/realStockfish';
-import { controlDirector } from './engine/controlDirector';
+import { getNextTheoryMoves } from './engine/theoryBook';
+import { controlDirector, subDirector, GameReadinessReport } from './engine/controlDirector';
 import { playChessSound } from './utils/chessAudio';
 import { ChessBoard } from './components/ChessBoard';
 import { ActiveLinesBar } from './components/ActiveLinesBar';
@@ -40,6 +43,7 @@ import { GameControls } from './components/GameControls';
 import { GameTurnClockBar } from './components/GameTurnClockBar';
 import { HumanityVerdictModal } from './components/HumanityVerdictModal';
 import { NewGameModal, NewGameOptions, ShowLinesMode } from './components/NewGameModal';
+import { FinishGameModal, GameResultType } from './components/FinishGameModal';
 import { HistoryView } from './components/HistoryView';
 import { AnalysisSuiteView, SuiteSubTab } from './components/AnalysisSuiteView';
 import { ProfileView } from './components/ProfileView';
@@ -76,8 +80,10 @@ export function App() {
 
   // Modals
   const [isNewGameModalOpen, setIsNewGameModalOpen] = useState(false);
+  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [verdictModalData, setVerdictModalData] = useState<{ san: string; verdict: HumanityVerdictResult } | null>(null);
+  const [checkmateNotice, setCheckmateNotice] = useState<string | null>(null);
 
   // Selected game for analysis tab
   const [selectedAnalysisGame, setSelectedAnalysisGame] = useState<GameRecord | null>(null);
@@ -96,6 +102,7 @@ export function App() {
     garbo: true,
     maia: true,
     personal: true,
+    chessjs: false, // Chess.js es sin flecha según directiva
   });
 
   const isOnline = useOnlineStatus();
@@ -115,9 +122,23 @@ export function App() {
     showLinesMode === 'none' ||
     (showLinesMode === 'my_turn_only' && chess.turn() !== userColor);
 
+  // Consulta de verificación con el Subdirector cada vez que inicia la pestaña Juego (<1ms)
+  const [gameReadiness, setGameReadiness] = useState<GameReadinessReport | null>(() => {
+    return subDirector.consultReadiness();
+  });
+
+  const handleConsultControl = useCallback(() => {
+    const report = subDirector.consultReadiness(profile.gamesPlayed || games.length);
+    setGameReadiness(report);
+    return report;
+  }, [profile.gamesPlayed, games.length]);
+
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     controlDirector.setTab(tab, profile.gamesPlayed || games.length);
+    if (tab === 'board') {
+      handleConsultControl();
+    }
   };
 
   // Re-trigger supervisor on position change
@@ -139,11 +160,12 @@ export function App() {
     [gameId, profile, whiteTime, blackTime, games, userColor, gameMode, showLinesMode]
   );
 
-  // Initialize supervisor and preload real Stockfish WASM on mount
+  // Initialize supervisor, consult control director, and preload real Stockfish WASM on mount
   useEffect(() => {
+    handleConsultControl();
     triggerSupervisor(chess);
     void realStockfish.init();
-  }, []);
+  }, [handleConsultControl, triggerSupervisor, chess]);
 
   // Clock countdown timer
   useEffect(() => {
@@ -186,21 +208,33 @@ export function App() {
 
       let moveChoice: { from: string; to: string } | null = null;
 
-      // 1) Stockfish real WebAssembly con fuerza calibrada (Elo 1500)
-      try {
-        const real = await realStockfish.analyze(chess.fen(), {
-          movetime: 700,
-          limitElo: AI_OPPONENT_ELO,
-        });
-        if (cancelled) return;
-        if (real && real.from && real.to) {
-          moveChoice = { from: real.from, to: real.to };
+      // 1) Apertura Teórica Magistral (<1ms, respuesta instantánea en aperturas)
+      const history = chess.history();
+      const theoryMoves = getNextTheoryMoves(history);
+      if (history.length < 10 && theoryMoves.length > 0) {
+        const bookMove = legalMoves.find((m) => theoryMoves.includes(m.san));
+        if (bookMove) {
+          moveChoice = { from: bookMove.from, to: bookMove.to };
         }
-      } catch (e) {
-        console.warn('[vs_ai] Error en Stockfish WASM, usando respaldo:', e);
       }
 
-      // 2) Respaldo: cálculo heurístico si el motor real no está disponible
+      // 2) Stockfish WebAssembly de baja latencia (movetime: 180ms)
+      if (!moveChoice) {
+        try {
+          const real = await realStockfish.analyze(chess.fen(), {
+            movetime: 180,
+            limitElo: AI_OPPONENT_ELO,
+          });
+          if (cancelled) return;
+          if (real && real.from && real.to) {
+            moveChoice = { from: real.from, to: real.to };
+          }
+        } catch (e) {
+          console.warn('[vs_ai] Error en Stockfish WASM, usando cálculo rápido:', e);
+        }
+      }
+
+      // 3) Respaldo táctico maestro instantáneo (<2ms)
       if (!moveChoice) {
         const basic = runStockfishRecommendation(chess);
         if (basic && basic.move) {
@@ -214,7 +248,7 @@ export function App() {
       if (moveChoice && !cancelled) {
         executeMove(moveChoice.from as Square, moveChoice.to as Square, 'STOCKFISH_ASSISTED');
       }
-    }, 500);
+    }, 150);
 
     return () => {
       cancelled = true;
@@ -271,13 +305,12 @@ export function App() {
       // Update supervisor
       triggerSupervisor(newChess);
 
-      // If game is over, save record
-      if (newChess.isGameOver()) {
+      // STRICT RULE: Lo único que puede finalizar automáticamente una partida para mandarla al historial es un mate
+      if (newChess.isCheckmate()) {
         setIsClockRunning(false);
-        let gameResult = '1/2-1/2';
-        if (newChess.isCheckmate()) {
-          gameResult = newChess.turn() === 'w' ? '0-1' : '1-0';
-        }
+        const winnerColor = newChess.turn() === 'w' ? 'b' : 'w';
+        const gameResult: GameResultType = winnerColor === 'w' ? '1-0' : '0-1';
+        const winnerText = winnerColor === 'w' ? 'Blancas' : 'Negras';
 
         const newRecord: GameRecord = {
           id: gameId,
@@ -285,8 +318,9 @@ export function App() {
           title: `Partida ${userColor === 'w' ? 'Blancas' : 'Negras'} vs ${gameMode === 'vs_ai' ? 'IA Offline' : 'Manual'}`,
           playerColor: userColor,
           result: gameResult,
+          reason: 'Jaque Mate',
           openingEco: 'B00',
-          openingName: 'Partida Oficial',
+          openingName: 'Jaque Mate Oficial',
           movesCount: updatedMoves.length,
           moves: updatedMoves,
           pgn: newChess.pgn(),
@@ -294,17 +328,15 @@ export function App() {
         };
 
         saveGameRecord(newRecord);
-        setGames((prev) => [newRecord, ...prev.filter((g) => g.id !== newRecord.id)]);
+        const updatedGames = [newRecord, ...games.filter((g) => g.id !== newRecord.id)];
+        setGames(updatedGames);
 
-        // Update profile gamesPlayed
-        const updatedProfile: PlayerProfile = {
-          ...profile,
-          gamesPlayed: (profile.gamesPlayed || 0) + 1,
-        };
+        // Actualizar estadísticas reales del perfil
+        const updatedProfile = computeProfileFromGames(updatedGames, profile);
         setProfile(updatedProfile);
         savePlayerProfile(updatedProfile);
 
-        // Record stockfish audit to controlDirector (then engine turns OFF)
+        // Registrar auditoría en el Director de Control
         controlDirector.recordStockfishAudit({
           gameId: newRecord.id,
           plyCount: newRecord.movesCount,
@@ -314,6 +346,10 @@ export function App() {
           brilliantMovesCount: 1,
           completedAt: new Date().toLocaleTimeString('es-ES'),
         });
+
+        setCheckmateNotice(
+          `¡Jaque Mate! Victoria de ${winnerText} (${gameResult}). Partida archivada en el Historial.`
+        );
       }
 
       return true;
@@ -336,12 +372,14 @@ export function App() {
       garbo: 'GARBO_ASSISTED',
       maia: 'MAIA_ASSISTED',
       personal: 'PERSONAL_ASSISTED',
+      chessjs: 'CHESSJS_ASSISTED',
     };
 
     executeMove(from, to, sourceMap[engineKey]);
   };
 
   const handleStartNewGame = (options: NewGameOptions) => {
+    handleConsultControl();
     const newId = `game_${Date.now()}`;
     const freshChess = new Chess();
     setChess(freshChess);
@@ -374,6 +412,7 @@ export function App() {
   };
 
   const handleResetPosition = () => {
+    handleConsultControl();
     const fresh = new Chess();
     setChess(fresh);
     setMovesList([]);
@@ -382,21 +421,26 @@ export function App() {
   };
 
   const handleFinishGame = () => {
-    // Si la partida tiene jugadas, asegurarse de archivarla en Historial
-    if (movesList.length > 0) {
-      let resultStr = '1/2-1/2';
-      if (chess.isCheckmate()) {
-        resultStr = chess.turn() === 'w' ? '0-1' : '1-0';
-      }
+    // Si la partida no tiene jugadas, simplemente reiniciar tablero
+    if (movesList.length === 0) {
+      handleResetPosition();
+      return;
+    }
+    // Abrir modal interactivo para consultar quién ganó y el motivo
+    setIsFinishModalOpen(true);
+  };
 
+  const handleConfirmFinishGame = (result: GameResultType, reason: string) => {
+    if (movesList.length > 0) {
       const newRecord: GameRecord = {
         id: gameId,
         date: new Date().toLocaleDateString('es-ES'),
         title: `Partida ${userColor === 'w' ? 'Blancas' : 'Negras'} (${gameMode === 'vs_ai' ? 'vs IA' : 'Manual'})`,
         playerColor: userColor,
-        result: resultStr,
+        result,
+        reason,
         openingEco: 'B00',
-        openingName: 'Partida Archivada',
+        openingName: 'Partida Oficial',
         movesCount: movesList.length,
         pgn: chess.pgn(),
         finalFen: chess.fen(),
@@ -404,12 +448,11 @@ export function App() {
       };
 
       saveGameRecord(newRecord);
-      setGames((prev) => [newRecord, ...prev.filter((g) => g.id !== newRecord.id)]);
+      const updatedGames = [newRecord, ...games.filter((g) => g.id !== newRecord.id)];
+      setGames(updatedGames);
 
-      const updatedProfile: PlayerProfile = {
-        ...profile,
-        gamesPlayed: (profile.gamesPlayed || 0) + 1,
-      };
+      // Recalcular perfil con base en el resultado real registrado
+      const updatedProfile = computeProfileFromGames(updatedGames, profile);
       setProfile(updatedProfile);
       savePlayerProfile(updatedProfile);
 
@@ -425,12 +468,17 @@ export function App() {
     }
 
     // Iniciar nuevo juego limpio
+    handleConsultControl();
     const fresh = new Chess();
     const newId = `game_${Date.now()}`;
     setChess(fresh);
     setGameId(newId);
     setMovesList([]);
     setLastMove(null);
+    setCheckmateNotice(null);
+    setIsClockRunning(false);
+    setWhiteTime(600);
+    setBlackTime(600);
     triggerSupervisor(fresh);
   };
 
@@ -523,7 +571,13 @@ export function App() {
           }`}
         >
           <Gamepad2 className="w-4 h-4" />
-          <span>Tablero</span>
+          <span>Juego</span>
+          {gameReadiness?.allEnginesOk && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"
+              title={`Control OK: ${gameReadiness.latencyMs} ms`}
+            />
+          )}
         </button>
 
         <button
@@ -579,7 +633,54 @@ export function App() {
       <main className="flex-1 p-2 sm:p-4 md:p-6 max-w-7xl mx-auto w-full">
         {activeTab === 'board' && (
           <div className="space-y-4">
-            {/* Turn & Clock Bar */}
+            {/* Aviso de Jaque Mate automático */}
+            {checkmateNotice && (
+              <div className="p-3.5 bg-emerald-950/90 border border-emerald-500/70 rounded-2xl text-xs text-emerald-200 flex items-center justify-between shadow-xl animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center font-bold text-emerald-300">
+                    🏆
+                  </div>
+                  <div>
+                    <span className="font-bold block text-white">{checkmateNotice}</span>
+                    <span className="text-[11px] text-emerald-300/80">Partida analizada y archivada en tu Historial y Motor Personal.</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleTabChange('history')}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
+                  >
+                    Ver Historial
+                  </button>
+                  <button
+                    onClick={() => setCheckmateNotice(null)}
+                    className="px-2 py-1.5 rounded-lg text-emerald-300 hover:text-white hover:bg-emerald-900/60 text-[11px]"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Aviso cuando el tiempo se agota pero la partida no se auto-finaliza */}
+            {(whiteTime === 0 || blackTime === 0) && !chess.isCheckmate() && (
+              <div className="p-3 bg-amber-950/80 border border-amber-500/60 rounded-xl text-xs text-amber-200 flex items-center justify-between shadow-md flex-wrap gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Tiempo agotado</strong> para {whiteTime === 0 ? 'Blancas' : 'Negras'}. La partida continúa en el tablero para estudio. Pulsa <strong>Finalizar Partida</strong> cuando desees declarar el resultado oficial.
+                  </span>
+                </div>
+                <button
+                  onClick={handleFinishGame}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-[11px] shrink-0 transition-colors shadow"
+                >
+                  Declarar Resultado
+                </button>
+              </div>
+            )}
+
+            {/* Turn & Clock Bar con verificación integrada del Subdirector (<1ms) */}
             <GameTurnClockBar
               chess={chess}
               userColor={userColor}
@@ -588,6 +689,8 @@ export function App() {
               whiteTimeSeconds={whiteTime}
               blackTimeSeconds={blackTime}
               thinkingTimeEstimate={supervisorState.thinkingTime}
+              subDirectorReport={gameReadiness}
+              onOpenControlTab={() => handleTabChange('control')}
             />
 
             {/* Layout: Chessboard on left, Engine cards on right */}
@@ -734,6 +837,18 @@ export function App() {
       <InstallModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      <FinishGameModal
+        isOpen={isFinishModalOpen}
+        onClose={() => setIsFinishModalOpen(false)}
+        onConfirmFinish={handleConfirmFinishGame}
+        movesCount={movesList.length}
+        userColor={userColor}
+        turn={chess.turn() as 'w' | 'b'}
+        whiteTime={whiteTime}
+        blackTime={blackTime}
+        gameMode={gameMode}
       />
 
       {verdictModalData && (

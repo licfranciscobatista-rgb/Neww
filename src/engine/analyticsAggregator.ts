@@ -143,6 +143,7 @@ export function aggregateMoveTracking(games: GameRecord[]): MoveTrackingStat[] {
           GARBO_ASSISTED: 0,
           MAIA_ASSISTED: 0,
           PERSONAL_ASSISTED: 0,
+          CHESSJS_ASSISTED: 0,
         },
         followUps: new Map(),
       };
@@ -201,6 +202,7 @@ export function aggregateEngineUsageAndEffectiveness(
     'GARBO_ASSISTED',
     'MAIA_ASSISTED',
     'PERSONAL_ASSISTED',
+    'CHESSJS_ASSISTED',
   ];
 
   const labels: Record<MoveSource, string> = {
@@ -209,6 +211,7 @@ export function aggregateEngineUsageAndEffectiveness(
     GARBO_ASSISTED: 'GarboChess',
     MAIA_ASSISTED: 'Maia 3',
     PERSONAL_ASSISTED: 'Motor Personal',
+    CHESSJS_ASSISTED: 'Chess.js (Dudosa)',
   };
 
   const colors: Record<MoveSource, string> = {
@@ -217,6 +220,7 @@ export function aggregateEngineUsageAndEffectiveness(
     GARBO_ASSISTED: '#34d399',
     MAIA_ASSISTED: '#c084fc',
     PERSONAL_ASSISTED: '#fbbf24',
+    CHESSJS_ASSISTED: '#fb7185',
   };
 
   const roles: Record<MoveSource, string> = {
@@ -225,6 +229,7 @@ export function aggregateEngineUsageAndEffectiveness(
     GARBO_ASSISTED: 'Líneas sólidas alternativas de bajo riesgo',
     MAIA_ASSISTED: 'Referencia de jugabilidad humana por Elo',
     PERSONAL_ASSISTED: 'Síntesis de patrones y hábitos propios',
+    CHESSJS_ASSISTED: 'Detector de inexactitudes y jugadas dudosas (-1.00 peón)',
   };
 
   const counts: Record<MoveSource, number> = {
@@ -233,6 +238,7 @@ export function aggregateEngineUsageAndEffectiveness(
     GARBO_ASSISTED: 0,
     MAIA_ASSISTED: 0,
     PERSONAL_ASSISTED: 0,
+    CHESSJS_ASSISTED: 0,
   };
 
   let totalMoves = 0;

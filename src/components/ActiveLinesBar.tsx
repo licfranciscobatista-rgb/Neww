@@ -41,6 +41,13 @@ const ENGINE_CONFIG: Record<
     badgeBg: 'rgba(245, 158, 11, 0.25)',
     badgeBorder: '#f59e0b',
   },
+  chessjs: {
+    label: 'CJS',
+    text: 'Chess.js (Sin flecha)',
+    stroke: '#fb7185',
+    badgeBg: 'rgba(251, 113, 133, 0.25)',
+    badgeBorder: '#fb7185',
+  },
 };
 
 export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({

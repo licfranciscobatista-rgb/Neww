@@ -2,6 +2,7 @@ import React from 'react';
 import { Chess } from 'chess.js';
 import { Clock } from 'lucide-react';
 import { ThinkingTimeEstimate } from '../types/chess';
+import { GameReadinessReport } from '../engine/controlDirector';
 
 interface GameTurnClockBarProps {
   chess: Chess;
@@ -11,6 +12,8 @@ interface GameTurnClockBarProps {
   whiteTimeSeconds: number;
   blackTimeSeconds: number;
   thinkingTimeEstimate?: ThinkingTimeEstimate | null;
+  subDirectorReport?: GameReadinessReport | null;
+  onOpenControlTab?: () => void;
 }
 
 export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
@@ -21,6 +24,8 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
   whiteTimeSeconds,
   blackTimeSeconds,
   thinkingTimeEstimate,
+  subDirectorReport,
+  onOpenControlTab,
 }) => {
   const currentTurn = chess.turn();
   const isWhiteTurn = currentTurn === 'w';
@@ -68,6 +73,20 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
           <span className="text-[10px] text-slate-500 hidden sm:inline">
             {gameMode === 'vs_ai' ? '• Contra IA Offline' : '• Tablero Manual'}
           </span>
+
+          {subDirectorReport && (
+            <button
+              type="button"
+              onClick={onOpenControlTab}
+              title={`Consultado con el Subdirector: 4 motores OK en ${subDirectorReport.latencyMs} ms`}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800/90 text-[10px] text-slate-300 hover:border-emerald-500/40 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
+              <span className="text-slate-400 font-medium">Subdirector:</span>
+              <span className="text-emerald-400 font-semibold">4 Motores OK</span>
+              <span className="text-sky-400 font-mono text-[9px]">(&lt;1ms)</span>
+            </button>
+          )}
         </div>
 
         <div>

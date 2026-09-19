@@ -70,6 +70,14 @@ export const ENGINE_COLORS: Record<
     badgeBorder: '#fbbf24',
     badgeBg: '#78350f',
   },
+  chessjs: {
+    stroke: '#f43f5e', // Rose
+    fill: '#fb7185',
+    label: 'CJS',
+    text: 'Chess.js',
+    badgeBorder: '#fda4af',
+    badgeBg: '#881337',
+  },
 };
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
@@ -79,7 +87,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   recommendations,
   candidateArrows = [],
   agreements,
-  activeArrowFilter = { stockfish: true, garbo: true, maia: true, personal: true },
+  activeArrowFilter = { stockfish: true, garbo: true, maia: true, personal: true, chessjs: false },
   onToggleEngineFilter,
   lastMove,
   interactive = true,

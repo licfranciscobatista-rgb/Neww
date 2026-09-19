@@ -1,41 +1,84 @@
 {
   "id": "director",
-  "name": "Director de Control de Motores",
-  "version": "1.0",
-  "type": "orchestration-controller",
-  "description": "Orquestador central que supervisa el ciclo de vida, asignación estricta de memoria (máx 20 MB por motor), encendido y apagado de Stockfish, Garbo, Maia y Motor Personal.",
+  "name": "Director General de Control de Motores y Arquitectura",
+  "version": "2.5.0",
+  "type": "master-orchestration-executive",
+  "authority": "Mando supremo sobre el Subdirector, 4 motores de juego, libro de aperturas y evaluadores analíticos.",
   "status": "ONLINE",
-  "limits": {
-    "maxMemoryPerEngineMb": 20,
+  "executivePolicies": {
+    "strictProcessIsolation": true,
+    "maxTotalRamCeilingMb": 100,
+    "maxMemoryPerEngineMb": {
+      "stockfish": 35,
+      "garbo": 15,
+      "maia": 15,
+      "personal": 15,
+      "chessjs": 5,
+      "book": 8
+    },
     "idleTimeoutMs": 3000,
-    "auditEngineShutdownOnComplete": true
+    "autoHibernateInactiveEngines": true,
+    "auditEngineShutdownOnComplete": true,
+    "uiFrameTargetFps": 60,
+    "priorityExecutionMode": "BALANCED_60FPS"
   },
-  "subdirector": {
+  "subdirectorInterface": {
     "id": "control-assistant",
-    "name": "Subdirector (Asistente de Control)",
+    "name": "Subdirector (Asistente de Control Técnico)",
     "role": "Supervisión en tiempo real de colas rápidas, filtrado de paquetes de candidatos entre Stockfish y Garbo, y telemetría de latencias.",
-    "status": "ONLINE"
+    "status": "ONLINE",
+    "channel": "DIRECTOR_SUBDIRECTOR_BUS",
+    "commandsHandled": [
+      "CMD_VERIFY_ENGINES_DEEP",
+      "CMD_ARBITRATE_CANDIDATES",
+      "CMD_ENFORCE_TIMEOUT_CUTOFF",
+      "CMD_REPORT_TELEMETRY"
+    ]
   },
-  "modules": [
+  "executiveCommands": [
     {
-      "name": "BookMovesEngine",
-      "status": "ONLINE",
-      "role": "Motor de jugadas de libro nativo en Chess.js con respuesta inmediata (<1ms) sin despertar motores pesados."
+      "id": "CMD_FORZAR_REINICIO_MOTORES",
+      "label": "Forzar Reinicio de Motores",
+      "description": "Reinicia los workers y estructuras de memoria de los 4 motores sin recargar la página.",
+      "risk": "LOW"
     },
     {
-      "name": "OpeningRegisterEngine",
-      "status": "ONLINE",
-      "role": "Registro y clasificación de aperturas ECO en memoria."
+      "id": "CMD_HIBERNAR_MOTORES",
+      "label": "Hibernar Motores Inactivos",
+      "description": "Pone en reposo los motores secundarios para ahorrar batería y optimizar la CPU móvil.",
+      "risk": "NONE"
     },
     {
-      "name": "AuditOrchestrator",
-      "status": "ONLINE",
-      "role": "Ejecución de auditorías profundas con Stockfish y apagado automático para ahorro de batería."
+      "id": "CMD_AUDITAR_SISTEMA_COMPLETO",
+      "label": "Auditar Sistema Completo",
+      "description": "Ejecuta un diagnóstico profundo de cada motor, verificando respuestas UCI y tiempo de respuesta.",
+      "risk": "NONE"
     },
     {
-      "name": "HumanityVerificationEngine",
-      "status": "ONLINE",
-      "role": "Supervisión con Maia para contrastar probabilidad de juego humano y detectar anomalías."
+      "id": "CMD_PURGAR_MEMORIA_CACHE",
+      "label": "Purgar Memoria Caché",
+      "description": "Limpia tablas de transposición y listas de candidatos no utilizados.",
+      "risk": "NONE"
+    },
+    {
+      "id": "CMD_MODO_MAXIMA_PRECISION",
+      "label": "Activar Modo Máxima Precisión",
+      "description": "Aumenta la profundidad táctica y asignación de tiempo de Stockfish a su tope permitido.",
+      "risk": "LOW"
+    },
+    {
+      "id": "CMD_MODO_ULTRARRAPIDO_60FPS",
+      "label": "Activar Modo Ultrarrápido 60 FPS",
+      "description": "Prioriza fluidez instantánea (<50ms) en la respuesta de las flechas y jugadas.",
+      "risk": "NONE"
     }
+  ],
+  "registeredEngines": [
+    { "id": "stockfish", "name": "Stockfish 19 WASM", "role": "Cálculo y Auditoría", "color": "#38bdf8" },
+    { "id": "garbo", "name": "GarboChess", "role": "Posicional y Heurístico", "color": "#a855f7" },
+    { "id": "maia", "name": "Maia 3", "role": "Predicción Humana", "color": "#f43f5e" },
+    { "id": "personal", "name": "Motor Personal", "role": "8 Ayudantes Autónomos", "color": "#10b981" },
+    { "id": "chessjs", "name": "Chess.js Árbitro", "role": "Reglas y Dudosas", "color": "#64748b" },
+    { "id": "book", "name": "Libro de Aperturas ECO", "role": "Teoría Instantánea", "color": "#eab308" }
   ]
 }

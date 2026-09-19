@@ -38,7 +38,7 @@ class RealStockfishManager {
   private lastPv = '';
   private initPromise: Promise<boolean> | null = null;
   private currentTimeout: NodeJS.Timeout | null = null;
-  private scriptUrl = '/stockfish/stockfish-19-lite-single.js';
+  private scriptUrl = '/stockfish/stockfish-worker.js';
 
   public async init(): Promise<boolean> {
     if (this.isInitialized && this.worker) return true;
@@ -57,33 +57,21 @@ class RealStockfishManager {
     this.isInitializing = true;
 
     try {
-      // Intentar leer engine.json para confirmar ruta del script
-      try {
-        const resp = await fetch('/stockfish/engine.json');
-        if (resp.ok) {
-          const config = await resp.json();
-          if (config && config.js) {
-            this.scriptUrl = `/stockfish/${config.js}`;
-          }
-        }
-      } catch {
-        // Usar ruta por defecto
-      }
-
       const worker = new Worker(this.scriptUrl);
 
       const readyPromise = new Promise<boolean>((resolve) => {
         const timeout = setTimeout(() => {
           console.warn('[RealStockfish] Tiempo de espera agotado al inicializar Worker.');
           resolve(false);
-        }, 6000);
+        }, 5000);
 
         const onInitMessage = (e: MessageEvent) => {
           const line = typeof e.data === 'string' ? e.data.trim() : '';
-          if (line === 'uciok') {
-            worker.postMessage('setoption name Hash value 20');
+          if (line.includes('uciok') || line === 'uciok') {
+            worker.postMessage('setoption name Hash value 32');
+            worker.postMessage('setoption name Threads value 1');
             worker.postMessage('isready');
-          } else if (line === 'readyok') {
+          } else if (line.includes('readyok') || line === 'readyok') {
             clearTimeout(timeout);
             worker.removeEventListener('message', onInitMessage);
             this.setupMainListener(worker);
@@ -259,8 +247,8 @@ class RealStockfishManager {
     return new Promise<RealStockfishAnalysis | null>((resolve) => {
       this.currentResolver = resolve;
 
-      // Timeout safety: movetime + 2000ms
-      const timeoutMs = Math.max(2500, movetime + 2500);
+      // Timeout safety: movetime + 500ms
+      const timeoutMs = Math.max(500, movetime + 500);
       this.currentTimeout = setTimeout(() => {
         console.warn('[RealStockfish] Timeout en análisis, forzando stop.');
         this.stop();

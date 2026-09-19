@@ -50,6 +50,14 @@ class EngineWorkloadMonitor {
         avgExecutionMs: 15,
         interventionsCount: 0,
       },
+      chessjs: {
+        engine: 'chessjs',
+        engineName: 'Chess.js (Árbitro & Dudosa)',
+        status: 'OPTIMAL',
+        lastExecutionMs: 1,
+        avgExecutionMs: 2,
+        interventionsCount: 0,
+      },
     };
   }
 

@@ -5,6 +5,9 @@
   "author": "Gary Linscott",
   "type": "classical-javascript",
   "description": "Motor posicional clásico con heurística de desarrollo armónico, seguridad de rey y control de centro.",
+  "files": {
+    "manifest": "/garbo/engine.json"
+  },
   "features": [
     "alpha-beta-pruning",
     "piece-square-tables",
@@ -12,10 +15,17 @@
     "positional-development-scoring",
     "center-pawn-priority"
   ],
+  "limits": {
+    "baseMemoryMb": 8.5,
+    "maxDynamicMemoryMb": 15.0,
+    "hardTimeoutSeconds": 5
+  },
   "defaultDepth": 4,
   "defaultTimeMs": 600,
   "color": "#059669",
   "badge": "GB Garbo",
+  "status": "ONLINE",
+  "fallbackGuaranteed": true,
   "weights": {
     "castlingBonus": 40,
     "centerControlBonus": 25,

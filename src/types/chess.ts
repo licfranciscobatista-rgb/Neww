@@ -1,11 +1,12 @@
-export type EngineType = 'stockfish' | 'garbo' | 'maia' | 'personal';
+export type EngineType = 'stockfish' | 'garbo' | 'maia' | 'personal' | 'chessjs';
 
 export type MoveSource =
   | 'MANUAL'
   | 'STOCKFISH_ASSISTED'
   | 'GARBO_ASSISTED'
   | 'MAIA_ASSISTED'
-  | 'PERSONAL_ASSISTED';
+  | 'PERSONAL_ASSISTED'
+  | 'CHESSJS_ASSISTED';
 
 export interface EngineRecommendation {
   engine: EngineType;

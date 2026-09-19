@@ -186,9 +186,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <div className="space-y-1 min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-white text-xs truncate">{game.title}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">
+                  <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
+                    game.result === '1-0'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : game.result === '0-1'
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                      : 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                  }`}>
                     {game.result}
                   </span>
+                  {game.reason && (
+                    <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 text-[10px] border border-slate-700">
+                      {game.reason}
+                    </span>
+                  )}
                   <span className="text-[10px] text-slate-400">
                     {game.playerColor === 'w' ? '♔ Blancas' : '♚ Negras'}
                   </span>
