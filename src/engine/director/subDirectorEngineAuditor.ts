@@ -63,7 +63,6 @@ export const SUBDIRECTOR_EMBEDDED_ENGINE_COPIES = {
     version: '19.0 Wasm / Negamax Master',
     files: [
       { path: '/stockfish/engine.json', type: 'manifest' },
-      { path: '/stockfish/stockfish-worker.js', type: 'worker_js' },
       { path: '/stockfish/stockfish-19-lite-single.js', type: 'code_module' },
       { path: '/stockfish/stockfish-19-lite-single.wasm', type: 'binary_wasm' },
     ],

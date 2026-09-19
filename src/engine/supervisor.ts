@@ -39,6 +39,7 @@ export class ChessSupervisor {
   private state: SupervisorState;
   private onStateChange: (state: SupervisorState) => void;
   private lastProfile: PlayerProfile | null = null;
+  private lastPositionKey = '';
 
   constructor(onStateChange: (state: SupervisorState) => void) {
     this.onStateChange = onStateChange;
@@ -79,6 +80,7 @@ export class ChessSupervisor {
   }
 
   public resetForNewGame(gameId: string): void {
+    this.lastPositionKey = '';
     // Consulta ultra-rápida de preparación al Subdirector (<0.1ms)
     subDirector.consultReadiness();
 
@@ -128,6 +130,24 @@ export class ChessSupervisor {
     } = params;
     this.lastProfile = profile;
     const fen = chess.fen();
+
+    // Deduplicación: onPositionChange se dispara desde varios sitios (jugada, efecto de React, reloj).
+    // Si nada relevante cambió, no se recalculan los 5 motores ni se lanza otra búsqueda de Stockfish.
+    const clockBucket = clockRemainingSeconds > 0 && clockRemainingSeconds < 60 ? 'low' : 'ok';
+    const positionKey = [
+      gameId,
+      fen,
+      userColor,
+      gameMode,
+      showLinesMode,
+      clockBucket,
+      profile.maiaEloCalibration || 1100,
+      profile.gamesPlayed || 0,
+      params.games ? params.games.length : -1,
+    ].join('|');
+    if (positionKey === this.lastPositionKey) return;
+    this.lastPositionKey = positionKey;
+
     const storedGames = params.games || loadGameRecords();
 
     if (chess.isGameOver()) {

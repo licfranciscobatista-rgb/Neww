@@ -33,7 +33,8 @@ import {
 import { ChessSupervisor, SupervisorState } from './engine/supervisor';
 import { runStockfishRecommendation } from './engine/stockfishEngine';
 import { realStockfish } from './engine/realStockfish';
-import { getNextTheoryMoves } from './engine/theoryBook';
+import { getNextTheoryMoves, lookupTheory } from './engine/theoryBook';
+import { cloneChessWithHistory } from './utils/chessClone';
 import { controlDirector, subDirector, GameReadinessReport } from './engine/controlDirector';
 import { playChessSound } from './utils/chessAudio';
 import { ChessBoard } from './components/ChessBoard';
@@ -141,6 +142,13 @@ export function App() {
     }
   };
 
+  // El reloj se lee desde refs: así triggerSupervisor NO cambia cada segundo y el efecto de abajo
+  // no recalcula los 5 motores (+ una búsqueda de Stockfish) en cada tic del reloj.
+  const whiteTimeRef = useRef(whiteTime);
+  const blackTimeRef = useRef(blackTime);
+  whiteTimeRef.current = whiteTime;
+  blackTimeRef.current = blackTime;
+
   // Re-trigger supervisor on position change
   const triggerSupervisor = useCallback(
     (currentChess: Chess) => {
@@ -149,7 +157,7 @@ export function App() {
         gameId,
         chess: currentChess,
         profile,
-        clockRemainingSeconds: currentChess.turn() === 'w' ? whiteTime : blackTime,
+        clockRemainingSeconds: currentChess.turn() === 'w' ? whiteTimeRef.current : blackTimeRef.current,
         averageUserMoveTime: 12,
         games,
         userColor,
@@ -157,7 +165,7 @@ export function App() {
         showLinesMode,
       });
     },
-    [gameId, profile, whiteTime, blackTime, games, userColor, gameMode, showLinesMode]
+    [gameId, profile, games, userColor, gameMode, showLinesMode]
   );
 
   // Initialize supervisor, consult control director, and preload real Stockfish WASM on mount
@@ -206,7 +214,7 @@ export function App() {
       const legalMoves = chess.moves({ verbose: true });
       if (legalMoves.length === 0) return;
 
-      let moveChoice: { from: string; to: string } | null = null;
+      let moveChoice: { from: string; to: string; promotion?: string } | null = null;
 
       // 1) Apertura Teórica Magistral (<1ms, respuesta instantánea en aperturas)
       const history = chess.history();
@@ -227,7 +235,7 @@ export function App() {
           });
           if (cancelled) return;
           if (real && real.from && real.to) {
-            moveChoice = { from: real.from, to: real.to };
+            moveChoice = { from: real.from, to: real.to, promotion: real.promotion };
           }
         } catch (e) {
           console.warn('[vs_ai] Error en Stockfish WASM, usando cálculo rápido:', e);
@@ -238,15 +246,15 @@ export function App() {
       if (!moveChoice) {
         const basic = runStockfishRecommendation(chess);
         if (basic && basic.move) {
-          moveChoice = { from: basic.from, to: basic.to };
+          moveChoice = { from: basic.from, to: basic.to, promotion: basic.move.length > 4 ? basic.move[4] : undefined };
         } else {
           const rand = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-          moveChoice = { from: rand.from, to: rand.to };
+          moveChoice = { from: rand.from, to: rand.to, promotion: rand.promotion };
         }
       }
 
       if (moveChoice && !cancelled) {
-        executeMove(moveChoice.from as Square, moveChoice.to as Square, 'STOCKFISH_ASSISTED');
+        executeMove(moveChoice.from as Square, moveChoice.to as Square, 'STOCKFISH_ASSISTED', moveChoice.promotion);
       }
     }, 150);
 
@@ -257,7 +265,7 @@ export function App() {
   }, [chess, gameMode, userColor]);
 
   // Handle a move execution
-  const executeMove = (from: Square, to: Square, source: MoveSource = 'MANUAL'): boolean => {
+  const executeMove = (from: Square, to: Square, source: MoveSource = 'MANUAL', promotion?: string): boolean => {
     try {
       const legalMoves = chess.moves({ verbose: true });
       const moveObj = legalMoves.find((m) => m.from === from && m.to === to);
@@ -266,10 +274,11 @@ export function App() {
       const isCapture = !!moveObj.captured;
       const isCheck = chess.inCheck();
 
-      const res = chess.move({ from, to, promotion: 'q' });
+      const res = chess.move({ from, to, promotion: promotion || 'q' });
       if (!res) return false;
 
-      const newChess = new Chess(chess.fen());
+      // Se conserva el historial (new Chess(fen) lo borraba en cada jugada)
+      const newChess = cloneChessWithHistory(chess);
       setChess(newChess);
       setLastMove({ from, to, san: res.san });
       setIsClockRunning(true);
@@ -294,7 +303,7 @@ export function App() {
         san: res.san,
         from,
         to,
-        uci: `${from}${to}`,
+        uci: `${from}${to}${res.promotion ?? ''}`,
         source,
         timestamp: Date.now(),
       };
@@ -312,6 +321,7 @@ export function App() {
         const gameResult: GameResultType = winnerColor === 'w' ? '1-0' : '0-1';
         const winnerText = winnerColor === 'w' ? 'Blancas' : 'Negras';
 
+        const matedTheory = lookupTheory(newChess.history());
         const newRecord: GameRecord = {
           id: gameId,
           date: new Date().toLocaleDateString('es-ES'),
@@ -319,8 +329,8 @@ export function App() {
           playerColor: userColor,
           result: gameResult,
           reason: 'Jaque Mate',
-          openingEco: 'B00',
-          openingName: 'Jaque Mate Oficial',
+          openingEco: matedTheory.eco,
+          openingName: matedTheory.openingName,
           movesCount: updatedMoves.length,
           moves: updatedMoves,
           pgn: newChess.pgn(),
@@ -375,7 +385,7 @@ export function App() {
       chessjs: 'CHESSJS_ASSISTED',
     };
 
-    executeMove(from, to, sourceMap[engineKey]);
+    executeMove(from, to, sourceMap[engineKey], moveUci.length > 4 ? moveUci[4] : undefined);
   };
 
   const handleStartNewGame = (options: NewGameOptions) => {
@@ -432,6 +442,7 @@ export function App() {
 
   const handleConfirmFinishGame = (result: GameResultType, reason: string) => {
     if (movesList.length > 0) {
+      const finishTheory = lookupTheory(chess.history());
       const newRecord: GameRecord = {
         id: gameId,
         date: new Date().toLocaleDateString('es-ES'),
@@ -439,8 +450,8 @@ export function App() {
         playerColor: userColor,
         result,
         reason,
-        openingEco: 'B00',
-        openingName: 'Partida Oficial',
+        openingEco: finishTheory.eco,
+        openingName: finishTheory.openingName,
         movesCount: movesList.length,
         pgn: chess.pgn(),
         finalFen: chess.fen(),

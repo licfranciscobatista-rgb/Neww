@@ -68,12 +68,23 @@ export function lookupTheory(sanMoves: string[]): {
     }
   }
 
+  // La partida sigue "en libro" si es el inicio (o la totalidad) de alguna línea conocida.
+  // Antes solo contaba si coincidía EXACTAMENTE con una entrada: 1.e4 e5 2.Nf3 salía "fuera de libro"
+  // aunque getNextTheoryMoves ofrece continuaciones para esa misma posición.
+  const prefixEntry = THEORY_BOOK.find(
+    (entry) => entry.moves.length >= sanMoves.length && sanMoves.every((m, idx) => entry.moves[idx] === m)
+  );
+
   if (bestMatch) {
     return {
       openingName: bestMatch.name,
       eco: bestMatch.eco,
-      isBook: maxLen >= sanMoves.length,
+      isBook: !!prefixEntry,
     };
+  }
+
+  if (prefixEntry) {
+    return { openingName: prefixEntry.name, eco: prefixEntry.eco, isBook: true };
   }
 
   return {

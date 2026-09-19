@@ -8,6 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// No pisar archivos de configuración que ya existen (antes el script borraba public/stockfish/
+// completo y regeneraba todos los engine.json, perdiendo cambios hechos a mano).
+function writeIfMissing(file, content) {
+  if (!fs.existsSync(file)) fs.writeFileSync(file, content);
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkgDir = path.join(root, 'node_modules', 'stockfish');
 const outDir = path.join(root, 'public', 'stockfish');
@@ -55,11 +61,10 @@ try {
   }
 
   const wasm = pick.replace(/\.js$/, '.wasm');
-  fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
   fs.copyFileSync(pick, path.join(outDir, path.basename(pick)));
   fs.copyFileSync(wasm, path.join(outDir, path.basename(wasm)));
-  fs.writeFileSync(
+  writeIfMissing(
     path.join(outDir, 'engine.json'),
     JSON.stringify({ js: path.basename(pick), wasm: path.basename(wasm) }, null, 2) + '\n'
   );
@@ -97,9 +102,9 @@ try {
     }
   };
   fs.mkdirSync(garboDir, { recursive: true });
-  fs.writeFileSync(path.join(garboDir, 'engine.json'), JSON.stringify(garboConfig, null, 2) + '\n');
+  writeIfMissing(path.join(garboDir, 'engine.json'), JSON.stringify(garboConfig, null, 2) + '\n');
   fs.mkdirSync(garbochessDir, { recursive: true });
-  fs.writeFileSync(path.join(garbochessDir, 'engine.json'), JSON.stringify(garboConfig, null, 2) + '\n');
+  writeIfMissing(path.join(garbochessDir, 'engine.json'), JSON.stringify(garboConfig, null, 2) + '\n');
   console.log('[garbo] Configuración engine.json lista en public/garbo/ y public/garbochess/');
 
   // Asegurar json de Maia Chess
@@ -144,7 +149,7 @@ try {
     }
   };
   fs.mkdirSync(maiaDir, { recursive: true });
-  fs.writeFileSync(path.join(maiaDir, 'engine.json'), JSON.stringify(maiaConfig, null, 2) + '\n');
+  writeIfMissing(path.join(maiaDir, 'engine.json'), JSON.stringify(maiaConfig, null, 2) + '\n');
   console.log('[maia] Configuración engine.json lista en public/maia/');
 
   // Asegurar json del Motor Personal y sus 8 Ayudantes
@@ -217,7 +222,7 @@ try {
     ]
   };
   fs.mkdirSync(personalDir, { recursive: true });
-  fs.writeFileSync(path.join(personalDir, 'engine.json'), JSON.stringify(personalConfig, null, 2) + '\n');
+  writeIfMissing(path.join(personalDir, 'engine.json'), JSON.stringify(personalConfig, null, 2) + '\n');
   console.log('[personal] Configuración engine.json con los 8 ayudantes lista en public/personal/');
 
   // Asegurar json del Director y Subdirector de Control
@@ -264,7 +269,7 @@ try {
     ]
   };
   fs.mkdirSync(controlDir, { recursive: true });
-  fs.writeFileSync(path.join(controlDir, 'director.json'), JSON.stringify(directorConfig, null, 2) + '\n');
+  writeIfMissing(path.join(controlDir, 'director.json'), JSON.stringify(directorConfig, null, 2) + '\n');
   console.log('[control] Configuración director.json lista en public/control/');
 
   // Asegurar json del Motor de Jugadas de Libro (Chess.js)
@@ -291,7 +296,7 @@ try {
     ]
   };
   fs.mkdirSync(bookDir, { recursive: true });
-  fs.writeFileSync(path.join(bookDir, 'engine.json'), JSON.stringify(bookConfig, null, 2) + '\n');
+  writeIfMissing(path.join(bookDir, 'engine.json'), JSON.stringify(bookConfig, null, 2) + '\n');
   console.log('[book] Configuración engine.json lista en public/book/');
 } catch (err) {
   console.warn('[stockfish] No se pudo preparar el motor real:', err && err.message ? err.message : err);

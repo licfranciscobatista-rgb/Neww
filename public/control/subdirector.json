@@ -17,7 +17,6 @@
         "engine": "stockfish",
         "manifestPath": "/stockfish/engine.json",
         "binaryFiles": [
-          "/stockfish/stockfish-worker.js",
           "/stockfish/stockfish-19-lite-single.js",
           "/stockfish/stockfish-19-lite-single.wasm"
         ],

@@ -29,6 +29,7 @@ const PIECE_NAMES: Record<string, string> = {
  * Devuelve true si el rival puede capturarla impunemente (regalo de pieza).
  */
 function isMaterialLostAfterMove(chessBefore: Chess, move: ScoredMove): boolean {
+  const baseLen = chessBefore.history().length;
   try {
     const executed = chessBefore.move({
       from: move.from as Square,
@@ -68,10 +69,13 @@ function isMaterialLostAfterMove(chessBefore: Chess, move: ScoredMove): boolean 
       }
     }
 
-    chessBefore.undo(); // Restaurar el tablero original siempre
     return isLost;
   } catch {
     return false;
+  } finally {
+    // Restaurar el tablero original SIEMPRE (si algo lanzaba una excepción a mitad, antes quedaba
+    // una jugada de más aplicada sobre el tablero real de la partida).
+    while (chessBefore.history().length > baseLen) chessBefore.undo();
   }
 }
 

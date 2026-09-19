@@ -6,7 +6,7 @@
   "type": "hybrid-wasm-master",
   "description": "Motor de ajedrez de máxima precisión táctica con soporte dual: Worker WebAssembly nativo offline y Evaluador Maestro Negamax con tablas PeSTO integradas.",
   "files": {
-    "worker": "/stockfish/stockfish-worker.js",
+    "worker": "/stockfish/stockfish-19-lite-single.js",
     "js": "/stockfish/stockfish-19-lite-single.js",
     "wasm": "/stockfish/stockfish-19-lite-single.wasm",
     "manifest": "/stockfish/engine.json"

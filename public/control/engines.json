@@ -8,7 +8,7 @@
       "name": "Stockfish 19 WASM / Maestro",
       "category": "tactical_analytical",
       "type": "WebWorker WASM + Negamax PST Backup",
-      "executable": "/stockfish/stockfish-worker.js",
+      "executable": "/stockfish/stockfish-19-lite-single.js",
       "wasmBinary": "/stockfish/stockfish-19-lite-single.wasm",
       "protocol": "UCI",
       "memoryQuotaMb": 35,

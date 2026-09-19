@@ -56,14 +56,24 @@ export async function analyzeFullGame(
     const candidates = evaluateMovesStockfish(chess, 2);
     const bestCand = candidates[0] || { san: move.san, score: prevEval, move: `${move.from}${move.to}` };
 
-    chess.move({ from: move.from, to: move.to, promotion: 'q' });
+    // La jugada realmente jugada, dentro de la misma lista evaluada (misma función de evaluación que bestCand)
+    const playedUci = move.uci && move.uci.length >= 4 ? move.uci : `${move.from}${move.to}`;
+    const played =
+      candidates.find((c) => c.move === playedUci) ||
+      candidates.find((c) => c.from === move.from && c.to === move.to);
+
+    chess.move({ from: move.from, to: move.to, promotion: playedUci.length > 4 ? playedUci[4] : 'q' });
     const fenAfter = chess.fen();
 
-    const afterCandidates = evaluateMovesStockfish(chess, 2);
-    const currentEval = afterCandidates[0] ? -afterCandidates[0].score : prevEval;
+    // Las puntuaciones del motor van SIEMPRE en perspectiva de Blancas (+ = mejor para Blancas).
+    // Antes se negaba la mejor respuesta del rival y se restaba sin mirar el color: para las Negras el
+    // signo salía invertido y casi nunca se detectaban sus errores.
+    const currentEval = played ? played.score : prevEval;
 
-    // Delta loss in centipawns
-    const deltaLoss = Math.max(0, (bestCand.score || 0) - currentEval);
+    // Pérdida en centipeones respecto a la mejor jugada, desde el punto de vista de quien movió
+    const deltaLoss = played
+      ? Math.max(0, isWhite ? bestCand.score - played.score : played.score - bestCand.score)
+      : 0;
 
     // Classify quality
     let quality: MoveQuality = 'good';
