@@ -16,6 +16,8 @@ export interface EngineRecommendation {
   san: string;
   evaluation?: number;
   evalDisplay?: string;
+  depth?: number;
+  isMasterMove?: boolean;
   confidence?: number;
   explanation?: string;
   color?: string;

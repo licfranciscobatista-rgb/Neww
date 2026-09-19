@@ -1,0 +1,26 @@
+{
+  "id": "garbo",
+  "name": "GarboChess",
+  "version": "3.0",
+  "author": "Gary Linscott",
+  "type": "classical-javascript",
+  "description": "Motor posicional clásico con heurística de desarrollo armónico, seguridad de rey y control de centro.",
+  "features": [
+    "alpha-beta-pruning",
+    "piece-square-tables",
+    "quiescence-search",
+    "positional-development-scoring",
+    "center-pawn-priority"
+  ],
+  "defaultDepth": 4,
+  "defaultTimeMs": 600,
+  "color": "#059669",
+  "badge": "GB Garbo",
+  "weights": {
+    "castlingBonus": 40,
+    "centerControlBonus": 25,
+    "minorPieceDevelopmentBonus": 30,
+    "prematureQueenPenalty": 35,
+    "pawnConsolidationBonus": 15
+  }
+}

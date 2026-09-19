@@ -29,6 +29,8 @@ import {
   saveAnalysisReport,
 } from './storage/chessStorage';
 import { ChessSupervisor, SupervisorState } from './engine/supervisor';
+import { runStockfishRecommendation } from './engine/stockfishEngine';
+import { realStockfish } from './engine/realStockfish';
 import { controlDirector } from './engine/controlDirector';
 import { playChessSound } from './utils/chessAudio';
 import { ChessBoard } from './components/ChessBoard';
@@ -36,7 +38,7 @@ import { EngineCards } from './components/EngineCards';
 import { GameControls } from './components/GameControls';
 import { GameTurnClockBar } from './components/GameTurnClockBar';
 import { HumanityVerdictModal } from './components/HumanityVerdictModal';
-import { NewGameModal, NewGameOptions } from './components/NewGameModal';
+import { NewGameModal, NewGameOptions, ShowLinesMode } from './components/NewGameModal';
 import { HistoryView } from './components/HistoryView';
 import { AnalysisSuiteView, SuiteSubTab } from './components/AnalysisSuiteView';
 import { ProfileView } from './components/ProfileView';
@@ -47,6 +49,9 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { HumanityVerdictResult } from './engine/humanityVerdict';
 
 type ActiveTab = 'board' | 'history' | 'suite' | 'profile' | 'control';
+
+// Fuerza del rival en partidas contra la IA (Elo calibrado de Stockfish real: mín. 1320, máx. 3190)
+const AI_OPPONENT_ELO = 1500;
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('board');
@@ -81,6 +86,9 @@ export function App() {
   // Sound settings
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Line recommendation preferences (default: only on player turn to eliminate lag)
+  const [showLinesMode, setShowLinesMode] = useState<ShowLinesMode>('my_turn_only');
+
   // Engine arrow filters
   const [arrowFilter, setArrowFilter] = useState<Record<EngineType, boolean>>({
     stockfish: true,
@@ -101,6 +109,11 @@ export function App() {
     return sup.getState();
   });
 
+  // Check if it is rival's turn or lines should be suppressed
+  const isRivalTurn =
+    showLinesMode === 'none' ||
+    (showLinesMode === 'my_turn_only' && chess.turn() !== userColor);
+
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     controlDirector.setTab(tab, profile.gamesPlayed || games.length);
@@ -117,14 +130,18 @@ export function App() {
         clockRemainingSeconds: currentChess.turn() === 'w' ? whiteTime : blackTime,
         averageUserMoveTime: 12,
         games,
+        userColor,
+        gameMode,
+        showLinesMode,
       });
     },
-    [gameId, profile, whiteTime, blackTime, games]
+    [gameId, profile, whiteTime, blackTime, games, userColor, gameMode, showLinesMode]
   );
 
-  // Initialize supervisor on mount
+  // Initialize supervisor and preload real Stockfish WASM on mount
   useEffect(() => {
     triggerSupervisor(chess);
+    void realStockfish.init();
   }, []);
 
   // Clock countdown timer
@@ -159,31 +176,50 @@ export function App() {
   // AI auto-reply when in vs_ai mode and it's the AI's turn
   useEffect(() => {
     if (gameMode !== 'vs_ai' || chess.isGameOver()) return;
+    if (chess.turn() === userColor) return;
 
-    const currentTurn = chess.turn();
-    if (currentTurn !== userColor) {
-      const timer = setTimeout(() => {
-        // Choose best engine move or candidate
-        const candidates = supervisorState.candidateArrows;
-        const legalMoves = chess.moves({ verbose: true });
-        if (legalMoves.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const legalMoves = chess.moves({ verbose: true });
+      if (legalMoves.length === 0) return;
 
-        let moveChoice: { from: string; to: string } | null = null;
-        if (candidates.length > 0) {
-          moveChoice = { from: candidates[0].from, to: candidates[0].to };
+      let moveChoice: { from: string; to: string } | null = null;
+
+      // 1) Stockfish real WebAssembly con fuerza calibrada (Elo 1500)
+      try {
+        const real = await realStockfish.analyze(chess.fen(), {
+          movetime: 700,
+          limitElo: AI_OPPONENT_ELO,
+        });
+        if (cancelled) return;
+        if (real && real.from && real.to) {
+          moveChoice = { from: real.from, to: real.to };
+        }
+      } catch (e) {
+        console.warn('[vs_ai] Error en Stockfish WASM, usando respaldo:', e);
+      }
+
+      // 2) Respaldo: cálculo heurístico si el motor real no está disponible
+      if (!moveChoice) {
+        const basic = runStockfishRecommendation(chess);
+        if (basic && basic.move) {
+          moveChoice = { from: basic.from, to: basic.to };
         } else {
           const rand = legalMoves[Math.floor(Math.random() * legalMoves.length)];
           moveChoice = { from: rand.from, to: rand.to };
         }
+      }
 
-        if (moveChoice) {
-          executeMove(moveChoice.from as Square, moveChoice.to as Square, 'STOCKFISH_ASSISTED');
-        }
-      }, 750);
+      if (moveChoice && !cancelled) {
+        executeMove(moveChoice.from as Square, moveChoice.to as Square, 'STOCKFISH_ASSISTED');
+      }
+    }, 500);
 
-      return () => clearTimeout(timer);
-    }
-  }, [chess, gameMode, userColor, supervisorState.candidateArrows]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [chess, gameMode, userColor]);
 
   // Handle a move execution
   const executeMove = (from: Square, to: Square, source: MoveSource = 'MANUAL'): boolean => {
@@ -312,6 +348,7 @@ export function App() {
     setUserColor(options.userColor);
     setBoardOrientation(options.userColor);
     setGameMode(options.gameMode);
+    setShowLinesMode(options.showLinesMode);
     setMovesList([]);
     setLastMove(null);
     setWhiteTime(options.timeControlSeconds || 600);
@@ -327,6 +364,10 @@ export function App() {
         profile,
         clockRemainingSeconds: options.timeControlSeconds || 600,
         averageUserMoveTime: 12,
+        games,
+        userColor: options.userColor,
+        gameMode: options.gameMode,
+        showLinesMode: options.showLinesMode,
       });
     }
   };
@@ -507,8 +548,10 @@ export function App() {
                   candidateArrows={supervisorState.candidateArrows}
                   agreements={supervisorState.agreements}
                   activeArrowFilter={arrowFilter}
+                  onToggleEngineFilter={handleToggleArrow}
                   lastMove={lastMove}
                   interactive={!chess.isGameOver()}
+                  isRivalTurn={isRivalTurn}
                 />
 
                 <GameControls
@@ -559,6 +602,7 @@ export function App() {
                   onApplyRecommendationMove={handleApplyRecommendationMove}
                   onRequestStockfish={() => supervisorRef.current?.requestStockfishUse(chess)}
                   onRequestGarbo={() => supervisorRef.current?.requestGarboUse(chess)}
+                  isRivalTurn={isRivalTurn}
                 />
               </div>
             </div>

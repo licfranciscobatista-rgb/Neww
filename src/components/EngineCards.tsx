@@ -32,6 +32,7 @@ interface EngineCardsProps {
   arrowFilter: Record<EngineType, boolean>;
   onToggleArrow: (engine: EngineType) => void;
   onApplyRecommendationMove?: (moveUci: string, source: EngineType) => void;
+  isRivalTurn?: boolean;
 }
 
 export const EngineCards: React.FC<EngineCardsProps> = ({
@@ -49,6 +50,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   onApplyRecommendationMove,
   onRequestStockfish,
   onRequestGarbo,
+  isRivalTurn = false,
 }) => {
   const sfRec = recommendations.stockfish;
   const garboRec = recommendations.garbo;
@@ -69,6 +71,14 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         <div className="py-4 flex items-center justify-center gap-2 text-xs text-slate-400 animate-pulse">
           <div className="w-3.5 h-3.5 rounded-full border-2 border-t-transparent animate-spin border-sky-400" />
           <span>{loadingText}</span>
+        </div>
+      );
+    }
+
+    if (isRivalTurn) {
+      return (
+        <div className="text-center py-2.5 px-3 rounded-lg bg-slate-900/50 border border-slate-800/80 text-[11px] text-slate-400">
+          Turno rival • Motor pausado (0 lag)
         </div>
       );
     }

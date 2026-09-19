@@ -1,0 +1,43 @@
+{
+  "id": "maia",
+  "name": "Maia Chess",
+  "version": "1.0",
+  "author": "University of Toronto / Maia Chess Project",
+  "type": "neural-network-human-prediction",
+  "description": "Red neuronal entrenada sobre millones de partidas humanas para predecir jugadas según nivel Elo (1100, 1500, 1900).",
+  "features": [
+    "human-move-prediction",
+    "elo-targeted-weights",
+    "blunder-rate-modeling",
+    "tactical-depth-scaling",
+    "capture-attraction"
+  ],
+  "defaultElo": 1100,
+  "supportedElos": [
+    1100,
+    1500,
+    1900
+  ],
+  "color": "#7c3aed",
+  "badge": "M Maia",
+  "models": {
+    "1100": {
+      "name": "Maia 1100 (Aficionado)",
+      "blunderRate": 0.18,
+      "tacticalDepth": 1,
+      "description": "Juego intuitivo con visión táctica básica y tolerancia a imprecisiones típicas de club."
+    },
+    "1500": {
+      "name": "Maia 1500 (Club Intermedio)",
+      "blunderRate": 0.08,
+      "tacticalDepth": 2,
+      "description": "Juego sólido de club con buen desarrollo y visión de amenazas directas."
+    },
+    "1900": {
+      "name": "Maia 1900 (Avanzado)",
+      "blunderRate": 0.03,
+      "tacticalDepth": 3,
+      "description": "Juego posicional maduro con cálculo táctico limpio y alta consistencia."
+    }
+  }
+}

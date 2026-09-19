@@ -1,0 +1,4 @@
+{
+  "js": "stockfish-19-lite-single.js",
+  "wasm": "stockfish-19-lite-single.wasm"
+}

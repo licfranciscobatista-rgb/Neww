@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { X, Play, Clock, Bot, User, Shuffle } from 'lucide-react';
 
+export type ShowLinesMode = 'my_turn_only' | 'both_turns' | 'none';
+
 export interface NewGameOptions {
   userColor: 'w' | 'b';
   gameMode: 'vs_ai' | 'manual_board';
   timeControlSeconds: number;
+  showLinesMode: ShowLinesMode;
 }
 
 interface NewGameModalProps {
@@ -21,6 +24,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
   const [selectedSide, setSelectedSide] = useState<'w' | 'b' | 'random'>('w');
   const [selectedMode, setSelectedMode] = useState<'vs_ai' | 'manual_board'>('vs_ai');
   const [selectedTime, setSelectedTime] = useState<number>(600);
+  const [selectedLinesMode, setSelectedLinesMode] = useState<ShowLinesMode>('my_turn_only');
 
   if (!isOpen) return null;
 
@@ -32,6 +36,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
       userColor: finalColor,
       gameMode: selectedMode,
       timeControlSeconds: selectedTime,
+      showLinesMode: selectedLinesMode,
     });
   };
 
@@ -186,6 +191,59 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
                 {t.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Line recommendation display preference */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+            4. Líneas y Flechas de Recomendación
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setSelectedLinesMode('my_turn_only')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedLinesMode === 'my_turn_only'
+                  ? 'bg-emerald-500/10 border-emerald-400 ring-1 ring-emerald-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-emerald-400">Solo en mi turno</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                0 lag. Pausa motores en turno rival y muestra solo líneas de tu bando.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedLinesMode('both_turns')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedLinesMode === 'both_turns'
+                  ? 'bg-sky-500/10 border-sky-400 ring-1 ring-sky-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-sky-400">Ambos turnos</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                Análisis libre con líneas continuas para blancas y negras.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedLinesMode('none')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedLinesMode === 'none'
+                  ? 'bg-amber-500/10 border-amber-400 ring-1 ring-amber-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-amber-400">Sin líneas</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                Tablero limpio sin flechas de ayuda.
+              </span>
+            </button>
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import {
   GameRecord,
 } from '../types/chess';
 import { evaluateMovesStockfish, runStockfishRecommendation } from './stockfishEngine';
+import { realStockfish } from './realStockfish';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
@@ -107,8 +108,17 @@ export class ChessSupervisor {
     games?: GameRecord[];
     userColor?: 'w' | 'b';
     gameMode?: 'vs_ai' | 'manual_board';
+    showLinesMode?: 'my_turn_only' | 'both_turns' | 'none';
   }): void {
-    const { gameId, chess, profile, clockRemainingSeconds, userColor = 'w', gameMode = 'vs_ai' } = params;
+    const {
+      gameId,
+      chess,
+      profile,
+      clockRemainingSeconds,
+      userColor = 'w',
+      gameMode = 'vs_ai',
+      showLinesMode = 'my_turn_only',
+    } = params;
     this.lastProfile = profile;
     const fen = chess.fen();
     const storedGames = params.games || loadGameRecords();
@@ -133,9 +143,15 @@ export class ChessSupervisor {
       return;
     }
 
-    // RIVAL'S TURN CHECK: In vs_ai mode, if it's the opponent's turn, DO NOT calculate or display engine lines
-    const isRivalTurn = gameMode === 'vs_ai' && chess.turn() !== userColor;
-    if (isRivalTurn) {
+    // RIVAL'S TURN / SILENT CHECK:
+    // If showLinesMode is 'none', or if 'my_turn_only' and it is NOT the player's turn:
+    // DO NOT run any engines or calculate arrows. This completely prevents lag and avoids
+    // displaying unrequested lines during the opponent's turn.
+    const isSuppressed =
+      showLinesMode === 'none' ||
+      (showLinesMode === 'my_turn_only' && chess.turn() !== userColor);
+
+    if (isSuppressed) {
       this.state = {
         ...this.state,
         fen,
@@ -327,9 +343,77 @@ export class ChessSupervisor {
     };
 
     this.onStateChange(this.state);
+
+    // Refinar de forma asíncrona con Stockfish 19 WASM real si está operativo
+    const currentFen = fen;
+    const currentGen = generation;
+    realStockfish
+      .analyze(currentFen, { movetime: 500 })
+      .then((real) => {
+        if (!real || !real.from || !real.to) return;
+        if (this.state.generation !== currentGen || this.state.isGameOver) return;
+
+        const refinedStockfishRec: EngineRecommendation = {
+          engine: 'stockfish',
+          engineName: 'Stockfish 19 WASM',
+          move: real.uci,
+          san: real.san,
+          from: real.from,
+          to: real.to,
+          evaluation: real.scoreCp !== undefined ? real.scoreCp / 100 : 0,
+          evalDisplay: real.evalDisplay,
+          depth: real.depth || 12,
+          explanation: `Stockfish 19 WASM (prof. ${real.depth || 12}): ${real.san}. ${real.pv ? 'Línea: ' + real.pv.slice(0, 24) : ''}`,
+          isMasterMove: true,
+        };
+
+        const newArrows = this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF'));
+        newArrows.unshift({
+          from: refinedStockfishRec.from,
+          to: refinedStockfishRec.to,
+          label: `SF • ${refinedStockfishRec.evalDisplay}`,
+          san: refinedStockfishRec.san,
+          color: '#2563eb',
+        });
+
+        const newRecs = {
+          ...this.state.recommendations,
+          stockfish: refinedStockfishRec,
+        };
+
+        const moveMap = new Map<string, { san: string; engines: EngineType[] }>();
+        const recList: Array<{ engine: EngineType; rec: EngineRecommendation | null }> = [
+          { engine: 'stockfish', rec: refinedStockfishRec },
+          { engine: 'garbo', rec: this.state.recommendations.garbo },
+          { engine: 'maia', rec: this.state.recommendations.maia },
+          { engine: 'personal', rec: this.state.recommendations.personal },
+        ];
+        for (const item of recList) {
+          if (item.rec && item.rec.move) {
+            const ex = moveMap.get(item.rec.move);
+            if (ex) {
+              ex.engines.push(item.engine);
+            } else {
+              moveMap.set(item.rec.move, { san: item.rec.san, engines: [item.engine] });
+            }
+          }
+        }
+        const newAgreements = Array.from(moveMap.entries())
+          .filter(([_, d]) => d.engines.length > 1)
+          .map(([m, d]) => ({ move: m, san: d.san, engines: d.engines }));
+
+        this.state = {
+          ...this.state,
+          recommendations: newRecs,
+          candidateArrows: newArrows,
+          agreements: newAgreements,
+        };
+        this.onStateChange(this.state);
+      })
+      .catch(() => {});
   }
 
-  public requestStockfishUse(chess: Chess): void {
+  public async requestStockfishUse(chess: Chess): Promise<void> {
     if (this.state.stockfishRemainingUses <= 0) return;
 
     this.state.loadingStates.stockfish = true;
@@ -337,20 +421,44 @@ export class ChessSupervisor {
 
     const startTime = performance.now();
     const remaining = this.state.stockfishRemainingUses - 1;
-    const rec = runStockfishRecommendation(chess);
-    const duration = performance.now() - startTime;
 
+    let rec: EngineRecommendation | null = null;
+    try {
+      const real = await realStockfish.analyze(chess.fen(), { movetime: 800 });
+      if (real && real.from && real.to) {
+        rec = {
+          engine: 'stockfish',
+          engineName: 'Stockfish 19 WASM',
+          move: real.uci,
+          san: real.san,
+          from: real.from,
+          to: real.to,
+          evaluation: real.scoreCp !== undefined ? real.scoreCp / 100 : 0,
+          evalDisplay: real.evalDisplay,
+          depth: real.depth || 12,
+          explanation: `Stockfish 19 WASM (profundidad ${real.depth || 12}): ${real.san}. ${real.pv ? 'Línea: ' + real.pv.slice(0, 30) : ''}`,
+          isMasterMove: true,
+        };
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!rec) {
+      rec = runStockfishRecommendation(chess);
+    }
+    const duration = performance.now() - startTime;
     controlDirector.watchEngineExecution('stockfish', duration);
 
     // Add arrow if not already present
-    const updatedArrows = [...this.state.candidateArrows];
-    if (rec && rec.move && !updatedArrows.some((a) => a.from === rec.from && a.to === rec.to)) {
+    const updatedArrows = [...this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF'))];
+    if (rec && rec.move) {
       updatedArrows.push({
         from: rec.from,
         to: rec.to,
-        label: `Stockfish (${rec.evalDisplay})`,
+        label: `SF • ${rec.evalDisplay}`,
         san: rec.san,
-        color: '#38bdf8',
+        color: '#2563eb',
       });
     }
 

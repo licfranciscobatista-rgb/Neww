@@ -10,8 +10,10 @@ interface ChessBoardProps {
   candidateArrows?: CandidateArrow[];
   agreements: { move: string; san: string; engines: EngineType[] }[];
   activeArrowFilter?: Record<EngineType, boolean>;
+  onToggleEngineFilter?: (engine: EngineType) => void;
   lastMove?: { from: string; to: string } | null;
   interactive?: boolean;
+  isRivalTurn?: boolean;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -78,8 +80,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   candidateArrows = [],
   agreements,
   activeArrowFilter = { stockfish: true, garbo: true, maia: true, personal: true },
+  onToggleEngineFilter,
   lastMove,
   interactive = true,
+  isRivalTurn = false,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
@@ -166,7 +170,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   }
 
   // Pure engine recommendation mapping: NO artificial fallback filler lines
+  // Suppressed completely during rival's turn to prevent lag and unnecessary lines
   const moveEngineMap: ArrowRenderItem[] = React.useMemo(() => {
+    if (isRivalTurn) return [];
+
     const list: ArrowRenderItem[] = [];
     const moveKeyMap = new Map<string, ArrowRenderItem>();
     const engineOrder: EngineType[] = ['stockfish', 'garbo', 'maia', 'personal'];
@@ -190,10 +197,69 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
 
     return list;
-  }, [recommendations, activeArrowFilter]);
+  }, [recommendations, activeArrowFilter, isRivalTurn]);
 
   return (
-    <div className="relative w-full max-w-[540px] aspect-square select-none rounded-xl overflow-hidden shadow-2xl border-4 border-stone-800 bg-stone-900">
+    <div className="w-full max-w-[540px] flex flex-col gap-2">
+      {/* Engine Status & Legend Bar */}
+      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs shadow-sm">
+        {isRivalTurn ? (
+          <div className="flex items-center gap-2 text-slate-400 font-medium w-full justify-center">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400/80 animate-pulse" />
+            <span className="text-[11px]">
+              Turno rival ({chess.turn() === 'w' ? 'Blancas' : 'Negras'}) • Motores en reposo (0 lag)
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between w-full flex-wrap gap-1.5">
+            <span className="text-[11px] font-bold text-slate-300">
+              Líneas activas:
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(['stockfish', 'garbo', 'maia', 'personal'] as EngineType[]).map((eng) => {
+                const conf = ENGINE_COLORS[eng];
+                const isActive = activeArrowFilter[eng];
+                const hasMove = !!recommendations[eng]?.move;
+                return (
+                  <button
+                    key={eng}
+                    type="button"
+                    onClick={() => onToggleEngineFilter && onToggleEngineFilter(eng)}
+                    title={`Alternar flecha de ${conf.text}`}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all ${
+                      isActive
+                        ? 'border-opacity-100 shadow-sm'
+                        : 'opacity-40 grayscale border-slate-700 bg-slate-800/60 text-slate-400'
+                    }`}
+                    style={{
+                      backgroundColor: isActive ? conf.badgeBg : undefined,
+                      borderColor: isActive ? conf.badgeBorder : undefined,
+                      color: isActive ? '#ffffff' : undefined,
+                    }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: conf.stroke }}
+                    />
+                    <span>{conf.label}</span>
+                    <span className="hidden sm:inline text-[10px] font-medium opacity-90">
+                      {conf.text}
+                    </span>
+                    {hasMove && (
+                      <span className="text-[10px] opacity-80 font-normal">
+                        ({recommendations[eng]?.san})
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Board square */}
+      <div className="relative w-full aspect-square select-none rounded-xl overflow-hidden shadow-2xl border-4 border-stone-800 bg-stone-900">
       <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
         {displayRanks.map((rank, rankIndex) =>
           displayFiles.map((file, fileIndex) => {
@@ -269,30 +335,77 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         viewBox="0 0 800 800"
       >
         <defs>
-          <marker id="arrow-sf" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker
+            id="arrow-stockfish"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
           </marker>
-          <marker id="arrow-garbo" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker
+            id="arrow-sf"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
+          </marker>
+          <marker
+            id="arrow-garbo"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 1 L 10 5 L 0 9 z" fill="#059669" />
           </marker>
-          <marker id="arrow-maia" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker
+            id="arrow-maia"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 1 L 10 5 L 0 9 z" fill="#7c3aed" />
           </marker>
-          <marker id="arrow-personal" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker
+            id="arrow-personal"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706" />
           </marker>
-          <marker id="arrow-multi" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker
+            id="arrow-multi"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#0284c7" />
-          </marker>
-          <marker id="arrow-cand" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 1 L 10 5 L 0 9 z" fill="#0ea5e9" />
           </marker>
         </defs>
 
         {moveEngineMap.map((group, idx) => {
           const start = getSquareCoordinates(group.from);
           const end = getSquareCoordinates(group.to);
-          const isCandidate = !!group.isCandidate;
           const isMultiple = group.engines.length > 1;
 
           const dx = end.x - start.x;
@@ -304,20 +417,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           const targetX = end.x - (dx / length) * shortenEnd;
           const targetY = end.y - (dy / length) * shortenEnd;
 
-          let markerId = 'arrow-cand';
-          let strokeColor = group.strokeColor || '#0ea5e9';
-          let fillColor = '#0ea5e9';
+          const primaryEngine = group.engines[0];
+          const primaryColor = ENGINE_COLORS[primaryEngine];
+          const markerId = isMultiple ? 'arrow-multi' : `arrow-${primaryEngine}`;
+          const strokeColor = isMultiple ? '#0284c7' : primaryColor.stroke;
+          const fillColor = isMultiple ? '#0284c7' : primaryColor.fill;
 
-          if (!isCandidate && group.engines.length > 0) {
-            const primaryEngine = group.engines[0];
-            const primaryColor = ENGINE_COLORS[primaryEngine];
-            markerId = isMultiple ? 'arrow-multi' : `arrow-${primaryEngine}`;
-            strokeColor = isMultiple ? '#0284c7' : primaryColor.stroke;
-            fillColor = isMultiple ? '#0284c7' : primaryColor.fill;
-          }
+          // Compute pill badge coordinates with edge guards
+          const pillWidth = 58;
+          const totalBadgesWidth = group.engines.length * (pillWidth + 4);
+          const badgeBaseX = targetX > 680 ? targetX - totalBadgesWidth - 8 : targetX + 6;
+          const badgeBaseY = targetY < 70 ? targetY + 22 : targetY - 12;
 
           return (
             <g key={`arrow-${group.from}-${group.to}-${idx}`}>
+              {/* Destination square highlight ring */}
               <circle
                 cx={end.x}
                 cy={end.y}
@@ -326,9 +440,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 fillOpacity="0.18"
                 stroke={strokeColor}
                 strokeWidth={isMultiple ? '3' : '2'}
-                strokeDasharray={isMultiple ? '4 2' : isCandidate ? '3 3' : 'none'}
+                strokeDasharray={isMultiple ? '4 2' : 'none'}
               />
 
+              {/* Arrow starting point dot */}
               <circle
                 cx={start.x}
                 cy={start.y}
@@ -337,81 +452,67 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 fillOpacity="0.8"
               />
 
+              {/* Arrow line */}
               <line
                 x1={start.x}
                 y1={start.y}
                 x2={targetX}
                 y2={targetY}
                 stroke={strokeColor}
-                strokeWidth={isMultiple ? 7 : isCandidate ? 4.5 : 5}
+                strokeWidth={isMultiple ? 7 : 5}
                 strokeLinecap="round"
-                strokeOpacity={isCandidate ? 0.75 : 0.9}
+                strokeOpacity={0.92}
                 markerEnd={`url(#${markerId})`}
               />
 
-              <g transform={`translate(${targetX + 6}, ${targetY - 14})`}>
-                {isCandidate ? (
-                  <g>
-                    <rect
-                      x="-2"
-                      y="-12"
-                      width="54"
-                      height="18"
-                      rx="9"
-                      fill="#0f172a"
-                      fillOpacity="0.92"
-                      stroke="#38bdf8"
-                      strokeWidth="1"
-                    />
-                    <text
-                      x="25"
-                      y="1"
-                      textAnchor="middle"
-                      fontSize="8"
-                      fontWeight="bold"
-                      fill="#38bdf8"
-                    >
-                      {group.label || 'Alt'}
-                    </text>
-                  </g>
-                ) : (
-                  <g>
-                    <rect
-                      x="-2"
-                      y="-12"
-                      width={group.engines.length * 24 + 14}
-                      height="18"
-                      rx="9"
-                      fill="#0f172a"
-                      fillOpacity="0.92"
-                      stroke="#e2e8f0"
-                      strokeWidth="1"
-                    />
-                    {group.engines.map((eng, eIdx) => {
-                      const conf = ENGINE_COLORS[eng];
-                      return (
-                        <g key={eng} transform={`translate(${eIdx * 24}, 0)`}>
-                          <circle cx="8" cy="-3" r="5" fill={conf.stroke} />
-                          <text
-                            x="8"
-                            y="0"
-                            textAnchor="middle"
-                            fontSize="7"
-                            fontWeight="bold"
-                            fill="#ffffff"
-                          >
-                            {conf.label[0]}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </g>
-                )}
+              {/* Distinct High-Contrast Badges for each engine on this move */}
+              <g transform={`translate(${badgeBaseX}, ${badgeBaseY})`}>
+                {group.engines.map((eng, eIdx) => {
+                  const conf = ENGINE_COLORS[eng];
+                  const xOffset = eIdx * (pillWidth + 4);
+                  return (
+                    <g key={eng} transform={`translate(${xOffset}, 0)`}>
+                      <rect
+                        x="0"
+                        y="-11"
+                        width={pillWidth}
+                        height="22"
+                        rx="11"
+                        fill={conf.badgeBg}
+                        fillOpacity="0.96"
+                        stroke={conf.badgeBorder}
+                        strokeWidth="1.5"
+                      />
+                      <circle cx="11" cy="0" r="6.5" fill={conf.stroke} />
+                      <text
+                        x="11"
+                        y="3"
+                        textAnchor="middle"
+                        fontSize="7.5"
+                        fontWeight="bold"
+                        fill="#ffffff"
+                      >
+                        {conf.label}
+                      </text>
+                      <text
+                        x="21"
+                        y="3.5"
+                        textAnchor="start"
+                        fontSize="8"
+                        fontWeight="bold"
+                        fill="#ffffff"
+                      >
+                        {conf.text}
+                      </text>
+                    </g>
+                  );
+                })}
               </g>
             </g>
           );
         })}
       </svg>
     </div>
+  </div>
   );
 };
