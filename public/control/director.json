@@ -1,0 +1,41 @@
+{
+  "id": "director",
+  "name": "Director de Control de Motores",
+  "version": "1.0",
+  "type": "orchestration-controller",
+  "description": "Orquestador central que supervisa el ciclo de vida, asignación estricta de memoria (máx 20 MB por motor), encendido y apagado de Stockfish, Garbo, Maia y Motor Personal.",
+  "status": "ONLINE",
+  "limits": {
+    "maxMemoryPerEngineMb": 20,
+    "idleTimeoutMs": 3000,
+    "auditEngineShutdownOnComplete": true
+  },
+  "subdirector": {
+    "id": "control-assistant",
+    "name": "Subdirector (Asistente de Control)",
+    "role": "Supervisión en tiempo real de colas rápidas, filtrado de paquetes de candidatos entre Stockfish y Garbo, y telemetría de latencias.",
+    "status": "ONLINE"
+  },
+  "modules": [
+    {
+      "name": "BookMovesEngine",
+      "status": "ONLINE",
+      "role": "Motor de jugadas de libro nativo en Chess.js con respuesta inmediata (<1ms) sin despertar motores pesados."
+    },
+    {
+      "name": "OpeningRegisterEngine",
+      "status": "ONLINE",
+      "role": "Registro y clasificación de aperturas ECO en memoria."
+    },
+    {
+      "name": "AuditOrchestrator",
+      "status": "ONLINE",
+      "role": "Ejecución de auditorías profundas con Stockfish y apagado automático para ahorro de batería."
+    },
+    {
+      "name": "HumanityVerificationEngine",
+      "status": "ONLINE",
+      "role": "Supervisión con Maia para contrastar probabilidad de juego humano y detectar anomalías."
+    }
+  ]
+}

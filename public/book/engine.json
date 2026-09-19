@@ -1,0 +1,21 @@
+{
+  "id": "book-moves",
+  "name": "Motor de Jugadas de Libro & Aperturas (Chess.js)",
+  "version": "1.0",
+  "type": "native-theory-book",
+  "description": "Motor independiente para resolución inmediata de aperturas teóricas (<1ms) sin despertar motores pesados ni consumir batería.",
+  "status": "ONLINE",
+  "color": "#eab308",
+  "badge": "BK Libro",
+  "limits": {
+    "maxMemoryMb": 5,
+    "maxResponseTimeMs": 5,
+    "independenceLevel": "completamente-aislado"
+  },
+  "roles": [
+    "Identificación instantánea de aperturas ECO y variantes principales",
+    "Servicio de jugadas de libro al Subdirector para acelerar respuestas",
+    "Filtro de exclusión para que el Ayudante de Historial descarte jugadas teóricas antes de destilar memoria del usuario",
+    "Referencia para que Maia no proponga jugadas de Stockfish salvo si son jugadas de libro oficiales"
+  ]
+}

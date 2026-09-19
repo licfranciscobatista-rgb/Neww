@@ -1,0 +1,67 @@
+{
+  "id": "personal",
+  "name": "Motor Personal (Modelo Jugador)",
+  "version": "1.0",
+  "type": "adaptive-distilled-clone",
+  "description": "Motor adaptativo que replica tu propio estilo de juego mediante destilación de memoria y 8 ayudantes analíticos especializados.",
+  "calibrationThreshold": 10,
+  "color": "#2563eb",
+  "badge": "P Personal",
+  "features": [
+    "manual-move-distillation",
+    "anti-ai-contamination-filter",
+    "book-move-discrimination",
+    "style-affinity-scoring",
+    "tactical-risk-fingerprint"
+  ],
+  "assistants": [
+    {
+      "id": "history",
+      "name": "Ayudante de Historial",
+      "role": "Destila y comprime la memoria de partidas manuales descartando jugadas de libro e IA (Stockfish/Garbo).",
+      "metric": "Bytes destilados y ratio de compresión"
+    },
+    {
+      "id": "style",
+      "name": "Ayudante de Estilo",
+      "role": "Evalúa la afinidad de jugadas candidatas frente a los patrones puros del jugador de 1.0 a 10.0.",
+      "metric": "Afinidad de estilo y arquetipo"
+    },
+    {
+      "id": "openings",
+      "name": "Ayudante de Aperturas & Repertorio",
+      "role": "Identifica las líneas predilectas con blancas y negras del usuario y sus tasas de victoria.",
+      "metric": "Repertorio de aperturas y jugada predilecta"
+    },
+    {
+      "id": "mistakes",
+      "name": "Ayudante de Errores Recurrentes",
+      "role": "Rastrea patrones de equivocaciones frecuentes (salidas de dama prematuras, rey sin enroque).",
+      "metric": "Frecuencia y severidad de patrones de error"
+    },
+    {
+      "id": "prophylaxis",
+      "name": "Ayudante de Profilaxis y Paciencia",
+      "role": "Mide la capacidad de maniobra, prevención de amenazas rivales y tiempo de espera antes de abrir.",
+      "metric": "Puntuación de paciencia profiláctica"
+    },
+    {
+      "id": "tactics",
+      "name": "Ayudante de Táctica y Agresividad",
+      "role": "Calcula el porcentaje de juego ofensivo, capturas, jaques e iniciativa directa.",
+      "metric": "Densidad táctica y puntuación de agresividad"
+    },
+    {
+      "id": "time",
+      "name": "Ayudante de Tiempo y Ritmo",
+      "role": "Supervisa la cadencia de segundos por jugada para alertar de decisiones precipitadas o apuros.",
+      "metric": "Tiempo medio de reflexión y cadencia"
+    },
+    {
+      "id": "endgame",
+      "name": "Ayudante de Transición y Finales",
+      "role": "Monitorea la efectividad en cambios de dama y transiciones a finales técnicos tras la jugada 30.",
+      "metric": "Frecuencia de finales y ritmo de simplificación"
+    }
+  ]
+}
