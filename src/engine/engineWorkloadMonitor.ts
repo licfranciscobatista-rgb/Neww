@@ -20,7 +20,7 @@ class EngineWorkloadMonitor {
     this.health = {
       stockfish: {
         engine: 'stockfish',
-        engineName: 'Stockfish 17',
+        engineName: 'Stockfish 19',
         status: 'OPTIMAL',
         lastExecutionMs: 14,
         avgExecutionMs: 16,

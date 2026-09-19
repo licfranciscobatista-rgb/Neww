@@ -201,63 +201,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   return (
     <div className="w-full max-w-[540px] flex flex-col gap-2">
-      {/* Engine Status & Legend Bar */}
-      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs shadow-sm">
-        {isRivalTurn ? (
-          <div className="flex items-center gap-2 text-slate-400 font-medium w-full justify-center">
-            <span className="inline-block w-2 h-2 rounded-full bg-amber-400/80 animate-pulse" />
-            <span className="text-[11px]">
-              Turno rival ({chess.turn() === 'w' ? 'Blancas' : 'Negras'}) • Motores en reposo (0 lag)
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between w-full flex-wrap gap-1.5">
-            <span className="text-[11px] font-bold text-slate-300">
-              Líneas activas:
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {(['stockfish', 'garbo', 'maia', 'personal'] as EngineType[]).map((eng) => {
-                const conf = ENGINE_COLORS[eng];
-                const isActive = activeArrowFilter[eng];
-                const hasMove = !!recommendations[eng]?.move;
-                return (
-                  <button
-                    key={eng}
-                    type="button"
-                    onClick={() => onToggleEngineFilter && onToggleEngineFilter(eng)}
-                    title={`Alternar flecha de ${conf.text}`}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all ${
-                      isActive
-                        ? 'border-opacity-100 shadow-sm'
-                        : 'opacity-40 grayscale border-slate-700 bg-slate-800/60 text-slate-400'
-                    }`}
-                    style={{
-                      backgroundColor: isActive ? conf.badgeBg : undefined,
-                      borderColor: isActive ? conf.badgeBorder : undefined,
-                      color: isActive ? '#ffffff' : undefined,
-                    }}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: conf.stroke }}
-                    />
-                    <span>{conf.label}</span>
-                    <span className="hidden sm:inline text-[10px] font-medium opacity-90">
-                      {conf.text}
-                    </span>
-                    {hasMove && (
-                      <span className="text-[10px] opacity-80 font-normal">
-                        ({recommendations[eng]?.san})
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Board square */}
       <div className="relative w-full aspect-square select-none rounded-xl overflow-hidden shadow-2xl border-4 border-stone-800 bg-stone-900">
       <div className="grid grid-cols-8 grid-rows-8 w-full h-full">

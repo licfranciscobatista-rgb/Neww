@@ -304,7 +304,7 @@ export const ControlView: React.FC = () => {
             </div>
           </div>
 
-          {/* 4. Memoria independiente a cada motor (Tope 20MB RAM) */}
+          {/* 4. Memoria independiente a cada motor (Stockfish 20-35MB, secundarios 15MB) */}
           <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-purple-400 font-bold">
@@ -312,7 +312,7 @@ export const ControlView: React.FC = () => {
                 <span className="text-white text-xs">Aislamiento Memoria</span>
               </div>
               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950 text-purple-300 border border-purple-800">
-                20 MB Máx
+                20-35 MB Máx
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-tight">
@@ -326,12 +326,12 @@ export const ControlView: React.FC = () => {
         </div>
       </div>
 
-      {/* Asignación Detallada de Memoria Virtual por Motor (Tope estricto de 20MB cada uno) */}
+      {/* Asignación Detallada de Memoria Virtual por Motor */}
       <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-white text-xs flex items-center gap-1.5">
             <Server className="w-4 h-4 text-sky-400" />
-            Memoria Aislada por Motor (Máximo 20 MB de RAM individual para velocidad absoluta)
+            Memoria Aislada por Motor (Stockfish 20 MB fijos / hasta 35 MB dinámicos, 15 MB motores ligeros)
           </h3>
           <span className="text-[10px] text-slate-400">Sin interferencias entre hilos</span>
         </div>

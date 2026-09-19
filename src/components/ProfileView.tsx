@@ -29,14 +29,26 @@ interface ProfileViewProps {
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfile }) => {
   const [name, setName] = useState(profile.username);
-  const [aggressiveness, setAggressiveness] = useState<number>(profile.style?.aggressiveness || 0);
-  const [tacticalInclination, setTacticalInclination] = useState<number>(profile.style?.tacticalInclination || 0);
-  const [patience, setPatience] = useState<number>(profile.style?.patience || 0);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Load user's actual game records and compute the 8 assistants' real telemetry
   const games = useMemo(() => loadGameRecords(), [profile.gamesPlayed]);
   const dashboard = useMemo(() => computeAssistantsDashboard(games), [games]);
+
+  // Valores automáticos extraídos por los ayudantes a partir de las partidas reales del jugador
+  const autoAggressiveness = dashboard.history.manualGames > 0
+    ? dashboard.distilled.aggressionScore
+    : (profile.style?.aggressiveness || 0);
+
+  const autoTacticalInclination = dashboard.history.manualGames > 0
+    ? Math.min(95, Math.max(5, dashboard.tactics.tacticalDensityPct || (100 - dashboard.distilled.patienceScore)))
+    : (profile.style?.tacticalInclination || 0);
+
+  const autoPatience = dashboard.history.manualGames > 0
+    ? dashboard.distilled.patienceScore
+    : (profile.style?.patience || 0);
+
+  const calibrationPct = Math.min(100, Math.round((profile.gamesPlayed / 10) * 100));
 
   const handleSave = () => {
     const updated: PlayerProfile = {
@@ -44,9 +56,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
       username: name,
       style: {
         ...profile.style,
-        aggressiveness,
-        tacticalInclination,
-        patience,
+        aggressiveness: autoAggressiveness,
+        tacticalInclination: autoTacticalInclination,
+        patience: autoPatience,
+        isCalibrated: profile.gamesPlayed >= 10,
       },
     };
     savePlayerProfile(updated);
@@ -59,9 +72,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
     if (window.confirm('¿Deseas reiniciar la calibración de tu perfil y memoria del motor personal?')) {
       const reset = resetPlayerProfile();
       setName(reset.username);
-      setAggressiveness(reset.style.aggressiveness);
-      setTacticalInclination(reset.style.tacticalInclination);
-      setPatience(reset.style.patience);
       onUpdateProfile(reset);
     }
   };
@@ -490,73 +500,126 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
         </div>
       </div>
 
-      {/* Manual Fine-Tuning Sliders (Only active once games exist or allowed to adjust) */}
+      {/* Avance y Ponderaciones Automáticas del Motor Personal (Sin intervención manual) */}
       <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-            <Sliders className="w-4 h-4 text-amber-400" />
-            <span>Ajuste Fino de Ponderaciones del Motor Personal</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h4 className="text-xs font-bold text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Avance y Ponderaciones del Motor Personal</span>
           </h4>
-          <span className="text-[10px] text-slate-400">
-            {profile.gamesPlayed >= 10 ? 'Calibrado con tus partidas' : 'Se ajustará con tus jugadas'}
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-300">Ponderación de Agresividad</span>
-              <span className="font-mono text-amber-400 font-bold">{aggressiveness}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="95"
-              value={aggressiveness}
-              onChange={(e) => setAggressiveness(Number(e.target.value))}
-              className="w-full accent-amber-500 cursor-pointer"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-300">Ponderación Táctica (vs Posicional)</span>
-              <span className="font-mono text-sky-400 font-bold">{tacticalInclination}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="95"
-              value={tacticalInclination}
-              onChange={(e) => setTacticalInclination(Number(e.target.value))}
-              className="w-full accent-sky-500 cursor-pointer"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-300">Ponderación de Paciencia / Profilaxis</span>
-              <span className="font-mono text-emerald-400 font-bold">{patience}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="95"
-              value={patience}
-              onChange={(e) => setPatience(Number(e.target.value))}
-              className="w-full accent-emerald-500 cursor-pointer"
-            />
+          <div className="text-[10px]">
+            {profile.gamesPlayed >= 10 ? (
+              <span className="px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1 w-fit">
+                <CheckCircle2 className="w-3 h-3" />
+                Calibración Completa (10/10)
+              </span>
+            ) : profile.gamesPlayed > 0 ? (
+              <span className="px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1 w-fit">
+                <Activity className="w-3 h-3" />
+                En Aprendizaje ({profile.gamesPlayed}/10 partidas)
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-400 border border-slate-700 w-fit">
+                Sin partidas (0/10) - Se calibrará automáticamente
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="pt-2">
-          <button
-            onClick={handleSave}
-            className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all"
-          >
-            <Save className="w-4 h-4" />
-            <span>Guardar Ajustes del Perfil</span>
-          </button>
+        {/* Barra de progreso global del motor */}
+        <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-300 font-medium">Progreso de maduración del motor</span>
+            <span className="font-mono font-bold text-amber-400">{calibrationPct}% ({profile.gamesPlayed}/10 partidas)</span>
+          </div>
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
+              style={{ width: `${Math.max(calibrationPct > 0 ? calibrationPct : 2, 2)}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            {profile.gamesPlayed >= 10
+              ? 'El motor personal ha alcanzado maduración completa y replica tus decisiones con fidelidad.'
+              : 'Juega partidas completas en modo manual; los 8 ayudantes extraen tu estilo automáticamente sin necesidad de ajustes manuales.'}
+          </p>
+        </div>
+
+        {/* Métricas resultantes del aprendizaje */}
+        <div className="space-y-3.5 pt-1">
+          {/* 1. Agresividad */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                <Swords className="w-3.5 h-3.5 text-amber-400" />
+                <span>Ponderación de Agresividad</span>
+              </span>
+              <span className="font-mono text-amber-400 font-bold">{autoAggressiveness}%</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 border border-slate-800 rounded-full overflow-hidden p-0.5">
+              <div
+                className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(autoAggressiveness, 0)}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {profile.gamesPlayed > 0
+                ? dashboard.tactics.evaluation
+                : 'Se calculará automáticamente analizando tus capturas, jaques y rupturas tácticas.'}
+            </div>
+          </div>
+
+          {/* 2. Táctica vs Posicional */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                <Activity className="w-3.5 h-3.5 text-sky-400" />
+                <span>Ponderación Táctica (vs Posicional)</span>
+              </span>
+              <span className="font-mono text-sky-400 font-bold">{autoTacticalInclination}%</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 border border-slate-800 rounded-full overflow-hidden p-0.5">
+              <div
+                className="h-full bg-sky-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(autoTacticalInclination, 0)}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {profile.gamesPlayed > 0
+                ? `Densidad táctica: ${dashboard.tactics.tacticalDensityPct}% de jugadas de iniciativa versus juego estructural.`
+                : 'Se calculará comparando tu frecuencia de jugadas forzadas frente a maniobras posicionales.'}
+            </div>
+          </div>
+
+          {/* 3. Paciencia / Profilaxis */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Ponderación de Paciencia / Profilaxis</span>
+              </span>
+              <span className="font-mono text-emerald-400 font-bold">{autoPatience}%</span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 border border-slate-800 rounded-full overflow-hidden p-0.5">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(autoPatience, 0)}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {profile.gamesPlayed > 0
+                ? `${dashboard.patience.evaluation} (${dashboard.patience.quietMovesCount} jugadas tranquilas).`
+                : 'Se calculará midiendo jugadas de prevención de amenazas rivales y consolidación.'}
+            </div>
+          </div>
+        </div>
+
+        {/* Nota informativa de autonomía */}
+        <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-start gap-2.5 text-[11px] text-slate-400">
+          <CheckCircle2 className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            <strong className="text-slate-200">Aprendizaje 100% Autónomo:</strong> Estas ponderaciones reflejan exclusivamente tu ADN ajedrecístico real. Se actualizan automáticamente cada vez que concluyes una partida, sin necesidad de calibración manual.
+          </p>
         </div>
       </div>
     </div>

@@ -161,7 +161,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   return (
     <div className="w-full space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Stockfish 17 */}
+        {/* Stockfish 19 */}
         <div className="bg-slate-900/90 border border-blue-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-blue-500/60">
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -170,7 +170,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                   <Cpu className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-200">Stockfish 17</h4>
+                  <h4 className="text-xs font-bold text-slate-200">Stockfish 19</h4>
                   <p className="text-[10px] text-blue-400 font-medium">Ref. Objetiva (Máx 15s)</p>
                 </div>
               </div>
@@ -331,12 +331,12 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
-        {/* Motor Personal (Identidad Propia del Jugador, Exclusivamente Asistida por sus 7 Ayudantes) */}
+        {/* Motor Personal (Identidad Propia del Jugador) */}
         <div
           className={`rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all border ${
             personalEngineUnlocked
               ? 'bg-slate-900/90 border-amber-500/40 hover:border-amber-500/70'
-              : 'bg-slate-950/90 border-amber-900/40 opacity-90'
+              : 'bg-slate-900/90 border-amber-900/40'
           }`}
         >
           <div>
@@ -357,7 +357,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-200">Motor Personal</h4>
-                  <p className="text-[10px] text-amber-400 font-medium">Identidad Propia • 7 Ayudantes</p>
+                  <p className="text-[10px] text-amber-400 font-medium">Modelo Jugador (8 Ayudantes)</p>
                 </div>
               </div>
 
@@ -366,10 +366,10 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     personalEngineUnlocked
                       ? 'bg-amber-950/60 text-amber-300 border-amber-600/40'
-                      : 'bg-amber-950/40 text-amber-400 border-amber-800/50'
+                      : 'bg-amber-950/60 text-amber-400 border-amber-800/50'
                   }`}
                 >
-                  {personalEngineUnlocked ? 'Desbloqueado' : `Bloqueado (${personalProgress})`}
+                  {personalProgress} partidas
                 </span>
                 {personalEngineUnlocked && (
                   <button
@@ -386,59 +386,25 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             </div>
 
             {!personalEngineUnlocked ? (
-              <div className="py-2.5 px-3 bg-slate-900/70 border border-amber-900/30 rounded-xl space-y-2.5 my-1 text-left">
-                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Calibrando ADN de Juego</span>
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2 my-1">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-400 text-[11px]">Calibración de perfil</span>
+                  <span className="font-mono text-amber-400 font-bold text-xs">{personalProgress}</span>
                 </div>
-
-                <p className="text-[11px] text-slate-300 leading-snug">
-                  Requiere al menos <strong className="text-amber-300">10 partidas jugadas por ti</strong> para activar recomendaciones y flechas.
+                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                  <div
+                    className="bg-amber-500 h-full transition-all duration-500 rounded-full"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (parseInt(personalProgress.split('/')[0] || '0', 10) / 10) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 text-center pt-0.5">
+                  Desbloqueo automático al completar 10 partidas manuales
                 </p>
-
-                {/* Progress bar */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                    <span>Progreso de partidas</span>
-                    <span className="text-amber-400 font-bold">{personalProgress}</span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                    <div
-                      className="bg-amber-500 h-full transition-all duration-500 rounded-full"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          (parseInt(personalProgress.split('/')[0] || '0', 10) / 10) * 100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* The 7 Specific Assistants Badges */}
-                <div className="space-y-1 pt-1 border-t border-slate-800/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    7 Ayudantes Exclusivos (Sin Maia ni Motores Externos):
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {[
-                      '1. Historial',
-                      '2. Estilo',
-                      '3. Aperturas',
-                      '4. Errores Recurrentes',
-                      '5. Profilaxis',
-                      '6. Táctica',
-                      '7. Tiempo',
-                    ].map((assistant) => (
-                      <span
-                        key={assistant}
-                        className="px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-800/40 text-amber-300/90 text-[9px] font-medium font-mono"
-                      >
-                        {assistant}
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </div>
             ) : (
               renderMoveBox(
@@ -454,10 +420,10 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             <span className="truncate max-w-[200px]">
               {personalEngineUnlocked
                 ? personalRec?.evalDisplay || 'Esperando posición'
-                : 'Sin flecha (bloqueado < 10 partidas)'}
+                : 'Flecha inactiva (requiere 10 partidas)'}
             </span>
             <span className="font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40 shrink-0">
-              Identidad Pura (7 Ayudantes)
+              {personalEngineUnlocked ? 'Afinidad Estilo' : `${personalProgress} jugadas`}
             </span>
           </div>
         </div>

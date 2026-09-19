@@ -120,7 +120,7 @@ export function runStockfishRecommendation(chess: Chess): EngineRecommendation |
 
   return {
     engine: 'stockfish',
-    engineName: 'Stockfish 17',
+    engineName: 'Stockfish 19',
     move: best.move,
     from: best.from,
     to: best.to,

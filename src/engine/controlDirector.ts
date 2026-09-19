@@ -70,9 +70,9 @@ export interface IndependentEnginesTelemetry {
   memoryIsolationEngine: {
     name: 'Aislamiento de Memoria por Motor';
     status: 'ONLINE';
-    maxRamPerEngineMb: 20.0;
+    maxRamPerEngineMb: number;
     totalActiveRamMb: number;
-    description: 'Tope estricto de 20 MB por motor para garantizar fluidez sin lag.';
+    description: string;
   };
 }
 
@@ -141,34 +141,34 @@ export class ControlDirectorManager {
     },
   ];
 
-  // Memory allocations: Maximum 20MB RAM per engine strictly enforced
+  // Memory allocations: 20MB fixed base for Stockfish (+15MB dynamic if needed up to 35MB), 15MB limit for secondary engines
   private memoryAllocations: Record<EngineType, MotorMemoryAllocation> = {
     stockfish: {
       engine: 'stockfish',
-      engineName: 'Stockfish 17',
-      allocatedMb: 14.5,
-      maxLimitMb: 20.0,
+      engineName: 'Stockfish 19',
+      allocatedMb: 20.0,
+      maxLimitMb: 35.0,
       status: 'IDLE',
     },
     garbo: {
       engine: 'garbo',
       engineName: 'GarboChess',
-      allocatedMb: 8.2,
-      maxLimitMb: 20.0,
+      allocatedMb: 8.5,
+      maxLimitMb: 15.0,
       status: 'IDLE',
     },
     maia: {
       engine: 'maia',
       engineName: 'Maia 3',
-      allocatedMb: 12.8,
-      maxLimitMb: 20.0,
+      allocatedMb: 10.0,
+      maxLimitMb: 15.0,
       status: 'ACTIVE',
     },
     personal: {
       engine: 'personal',
       engineName: 'Motor Personal (8 Ayudantes)',
-      allocatedMb: 6.4,
-      maxLimitMb: 20.0,
+      allocatedMb: 6.0,
+      maxLimitMb: 15.0,
       status: 'LOCKED_NEED_10_GAMES',
     },
   };
@@ -321,9 +321,9 @@ export class ControlDirectorManager {
       memoryIsolationEngine: {
         name: 'Aislamiento de Memoria por Motor',
         status: 'ONLINE',
-        maxRamPerEngineMb: 20.0,
+        maxRamPerEngineMb: 35.0,
         totalActiveRamMb: Number(totalAllocatedRam.toFixed(1)),
-        description: 'Tope estricto de 20 MB por motor para garantizar fluidez sin lag.',
+        description: '20 MB fijos a Stockfish (+15 MB dinámicos según cálculo) y 15 MB para Garbo, Maia y Motor Personal.',
       },
     };
 

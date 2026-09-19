@@ -25,37 +25,37 @@ export const ThinkingTimeBar: React.FC<ThinkingTimeBarProps> = ({ estimate, cloc
   };
 
   return (
-    <div className="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-3 shadow-md flex items-center justify-between flex-wrap gap-2 text-xs">
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-          <Clock className="w-4 h-4" />
+    <div className="w-full bg-slate-900 border-2 border-sky-500/40 rounded-xl p-3 shadow-lg flex items-center justify-between flex-wrap gap-2 text-xs">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/50 flex items-center justify-center text-sky-300 shadow-inner">
+          <Clock className="w-5 h-5 text-sky-400 animate-pulse" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-200 font-semibold">
-              Tiempo para pensar:
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-100 font-bold text-xs">
+              Tiempo recomendado:
             </span>
-            <span className="font-mono text-sky-300 font-bold text-sm bg-sky-950 px-2 py-0.5 rounded border border-sky-600/40">
-              ~{estimate.recommendedSeconds} s
+            <span className="font-mono text-sky-200 font-black text-base bg-sky-950/90 px-2.5 py-0.5 rounded-lg border-2 border-sky-400/60 shadow-sm">
+              {estimate.recommendedSeconds} s
             </span>
             <span
-              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+              className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${
                 urgencyColors[estimate.urgency]
               }`}
             >
               {urgencyLabels[estimate.urgency]}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[12px] text-slate-300 font-medium mt-0.5">
             {estimate.reasoning}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-[11px] text-slate-400">
-        <div className="flex items-center gap-1.5">
-          <span className="text-slate-400">Complejidad:</span>
-          <div className="w-16 bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+      <div className="flex items-center gap-4 text-[11px] text-slate-300">
+        <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1.5 rounded-lg border border-slate-800">
+          <span className="text-slate-400 font-medium">Complejidad:</span>
+          <div className="w-16 bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700">
             <div
               className={`h-full rounded-full transition-all ${
                 estimate.complexityScore > 7
@@ -67,15 +67,15 @@ export const ThinkingTimeBar: React.FC<ThinkingTimeBarProps> = ({ estimate, cloc
               style={{ width: `${Math.min(100, estimate.complexityScore * 10)}%` }}
             />
           </div>
-          <span className="font-mono text-slate-300 font-bold">
+          <span className="font-mono text-white font-bold">
             {estimate.complexityScore}/10
           </span>
         </div>
 
         {clockRemaining !== undefined && clockRemaining > 0 && (
-          <div className="hidden md:flex items-center gap-1 font-mono text-slate-300">
-            <span className="text-slate-400">Reloj:</span>
-            <span className="font-semibold">
+          <div className="hidden md:flex items-center gap-1.5 font-mono text-slate-200 bg-slate-950/60 px-2.5 py-1.5 rounded-lg border border-slate-800">
+            <span className="text-slate-400 text-[10px] uppercase font-bold">Reloj:</span>
+            <span className="font-bold text-sky-300">
               {Math.floor(clockRemaining / 60)}:
               {(clockRemaining % 60).toString().padStart(2, '0')}
             </span>

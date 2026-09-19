@@ -81,6 +81,7 @@ class RealStockfishManager {
         const onInitMessage = (e: MessageEvent) => {
           const line = typeof e.data === 'string' ? e.data.trim() : '';
           if (line === 'uciok') {
+            worker.postMessage('setoption name Hash value 20');
             worker.postMessage('isready');
           } else if (line === 'readyok') {
             clearTimeout(timeout);

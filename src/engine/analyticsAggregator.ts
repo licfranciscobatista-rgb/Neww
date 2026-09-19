@@ -205,7 +205,7 @@ export function aggregateEngineUsageAndEffectiveness(
 
   const labels: Record<MoveSource, string> = {
     MANUAL: 'Juego Manual (Humano)',
-    STOCKFISH_ASSISTED: 'Stockfish 17',
+    STOCKFISH_ASSISTED: 'Stockfish 19',
     GARBO_ASSISTED: 'GarboChess',
     MAIA_ASSISTED: 'Maia 3',
     PERSONAL_ASSISTED: 'Motor Personal',
@@ -269,7 +269,7 @@ export function aggregateEngineUsageAndEffectiveness(
     },
     bestUsedEngine: {
       source: 'STOCKFISH_ASSISTED',
-      label: 'Stockfish 17',
+      label: 'Stockfish 19',
       winRate: 88,
       reason: 'Máxima tasa de conversión táctica sin fallas de cálculo',
     },

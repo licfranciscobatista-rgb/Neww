@@ -10,6 +10,7 @@ import {
   Plus,
   Brain,
   Share2,
+  Flag,
 } from 'lucide-react';
 import { PlayerProfile } from '../types/chess';
 import { evaluateHumanityVerdict, HumanityVerdictResult } from '../engine/humanityVerdict';
@@ -21,6 +22,7 @@ interface GameControlsProps {
   onFlipBoard: () => void;
   onNewGame: () => void;
   onResetPosition: () => void;
+  onFinishGame?: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
   lastMoveSan?: string;
@@ -34,6 +36,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
   onFlipBoard,
   onNewGame,
   onResetPosition,
+  onFinishGame,
   soundEnabled,
   onToggleSound,
   lastMoveSan,
@@ -96,6 +99,17 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <RotateCcw className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Reiniciar</span>
         </button>
+
+        {onFinishGame && (
+          <button
+            onClick={onFinishGame}
+            className="px-2.5 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-700/60 font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Finalizar y archivar partida actual en Historial"
+          >
+            <Flag className="w-3.5 h-3.5 text-rose-400" />
+            <span>Finalizar Partida</span>
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5">
