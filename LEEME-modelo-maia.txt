@@ -1,0 +1,8 @@
+Maia 3 (79M) en int8, partido en trozos de 22 MB o menos (bajo el limite de 25 MB de GitHub).
+
+Copia los 5 archivos (maia3.json y maia3.bin.0 ... maia3.bin.3) a la carpeta  public/maia/  del proyecto y recompila.
+Deben estar TODOS; si falta uno, la app usa la simulacion de Maia (sigue funcionando).
+
+Aviso: este modelo tarda ~5 s por posicion en un PC y mas en un movil. Para movil conviene Maia3-5M (~6 MB en un solo archivo):
+  python scripts/convert-maia3.py maia3-5m.pt public/maia/maia3 --dtype int8
+Licencia: el codigo de Maia 3 es AGPL-3.0; revisa la licencia de los pesos en Hugging Face.
