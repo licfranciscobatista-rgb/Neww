@@ -1,0 +1,32 @@
+{
+  "id": "stockfish",
+  "name": "Stockfish 19",
+  "version": "19.0 Wasm / Negamax Master",
+  "author": "The Stockfish Developers (Tord Romstad, Marco Costalba, Joona Kiiski, Gary Linscott)",
+  "type": "hybrid-wasm-master",
+  "description": "Motor de ajedrez de máxima precisión táctica con soporte dual: Worker WebAssembly nativo offline y Evaluador Maestro Negamax con tablas PeSTO integradas.",
+  "files": {
+    "worker": "/stockfish/stockfish-19-lite-single.js",
+    "js": "/stockfish/stockfish-19-lite-single.js",
+    "wasm": "/stockfish/stockfish-19-lite-single.wasm",
+    "manifest": "/stockfish/engine.json"
+  },
+  "limits": {
+    "baseMemoryMb": 20.0,
+    "maxDynamicMemoryMb": 35.0,
+    "hardTimeoutSeconds": 15,
+    "maxThreads": 1
+  },
+  "features": [
+    "uci-protocol-compliance",
+    "wasm-single-thread-offline",
+    "alpha-beta-pesto-fallback",
+    "quiescence-search",
+    "transposition-table",
+    "null-move-pruning"
+  ],
+  "color": "#dc2626",
+  "badge": "SF 19",
+  "status": "ONLINE",
+  "fallbackGuaranteed": true
+}

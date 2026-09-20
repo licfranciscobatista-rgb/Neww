@@ -1,0 +1,30 @@
+{
+  "version": "1.5",
+  "policyName": "Politica de Auditoria y Calibracion de Calidad",
+  "author": "Director General de Control",
+  "enforcementLevel": "STRICT",
+  "centipawnThresholds": {
+    "brilliant": { "label": "Brillante", "minCpAdvantage": 300, "isSacrificeRequired": true },
+    "great": { "label": "Gran Jugada", "maxCpLoss": 10, "isTacticalFind": true },
+    "best": { "label": "Mejor Jugada", "maxCpLoss": 20 },
+    "excellent": { "label": "Excelente", "maxCpLoss": 45 },
+    "good": { "label": "Buena", "maxCpLoss": 85 },
+    "inaccuracy": { "label": "Imprecisión", "minCpLoss": 86, "maxCpLoss": 150 },
+    "mistake": { "label": "Error", "minCpLoss": 151, "maxCpLoss": 300 },
+    "blunder": { "label": "Grave Error (Blunder)", "minCpLoss": 301 }
+  },
+  "stockfishAuditLimits": {
+    "maxPliesPerBatch": 100,
+    "movetimePerPlyMs": 150,
+    "threads": 1,
+    "hashMb": 32,
+    "autoShutdownOnComplete": true,
+    "forceKillAfterSeconds": 30
+  },
+  "maiaHumanityLimits": {
+    "sampleInterval": 2,
+    "anomalyThresholdPercent": 85,
+    "evaluationsRangeElos": [1100, 1500, 1900]
+  },
+  "exportFormat": "JSON_STANDALONE"
+}

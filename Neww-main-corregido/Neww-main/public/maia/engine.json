@@ -1,0 +1,54 @@
+{
+  "id": "maia",
+  "name": "Maia Chess",
+  "version": "3.0",
+  "author": "University of Toronto / Maia Chess Project",
+  "type": "neural-network-human-prediction",
+  "description": "Maia 3 (CSSLab, Universidad de Toronto): red neuronal transformer que predice la jugada que elegiría un jugador de un Elo dado. Se ejecuta offline en un Web Worker si los pesos están instalados en /maia/maia3.json + /maia/maia3.bin (ver scripts/README-maia3.md). Si no están, la app usa una simulación heurística por Elo (maiaEngine.ts), que NO es una red neuronal.",
+  "features": [
+    "human-move-prediction",
+    "elo-targeted-weights",
+    "blunder-rate-modeling",
+    "tactical-depth-scaling",
+    "capture-attraction"
+  ],
+  "defaultElo": 1100,
+  "supportedElos": [
+    600,
+    1100,
+    1500,
+    1900,
+    2400
+  ],
+  "color": "#7c3aed",
+  "badge": "M Maia",
+  "models": {
+    "1100": {
+      "name": "Maia 1100 (Aficionado)",
+      "blunderRate": 0.18,
+      "tacticalDepth": 1,
+      "description": "Juego intuitivo con visión táctica básica y tolerancia a imprecisiones típicas de club."
+    },
+    "1500": {
+      "name": "Maia 1500 (Club Intermedio)",
+      "blunderRate": 0.08,
+      "tacticalDepth": 2,
+      "description": "Juego sólido de club con buen desarrollo y visión de amenazas directas."
+    },
+    "1900": {
+      "name": "Maia 1900 (Avanzado)",
+      "blunderRate": 0.03,
+      "tacticalDepth": 3,
+      "description": "Juego posicional maduro con cálculo táctico limpio y alta consistencia."
+    }
+  },
+  "files": {
+    "manifest": "/maia/engine.json",
+    "worker": "/maia/maia-worker.js",
+    "model": "/maia/maia3.json",
+    "weights": "/maia/maia3.bin"
+  },
+  "modelOptional": true,
+  "protocol": "worker-messages: init / run (frame 64x12, selfElo, oppoElo)",
+  "license": "AGPL-3.0 (código de Maia 3); revisar la licencia de los pesos en Hugging Face"
+}

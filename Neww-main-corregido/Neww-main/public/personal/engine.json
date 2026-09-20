@@ -1,0 +1,85 @@
+{
+  "id": "personal",
+  "name": "Motor Personal (Modelo Jugador)",
+  "version": "1.0",
+  "type": "adaptive-distilled-clone",
+  "description": "Motor adaptativo que replica tu propio estilo de juego mediante destilación de memoria y 8 ayudantes analíticos especializados.",
+  "calibrationThreshold": 10,
+  "color": "#2563eb",
+  "badge": "P Personal",
+  "safetyArchitecture": {
+    "zeroCrashGuarantee": true,
+    "isolatedMemory": true,
+    "workerDependency": false,
+    "binaryWasmDependency": false,
+    "maxTimeoutMs": 50,
+    "fallbackStrategy": "positional_consolidation_guaranteed"
+  },
+  "features": [
+    "manual-move-distillation",
+    "anti-ai-contamination-filter",
+    "book-move-discrimination",
+    "style-affinity-scoring",
+    "tactical-risk-fingerprint",
+    "endgame-activation-heuristics",
+    "blunder-prevention-shield"
+  ],
+  "assistants": [
+    {
+      "id": "history",
+      "name": "Ayudante de Historial & Destilación",
+      "role": "Destila y comprime la memoria de partidas manuales descartando jugadas de libro e IA (Stockfish/Garbo).",
+      "metric": "Bytes destilados y ratio de compresión",
+      "orders": "Filtrar únicamente jugadas MANUAL; purgar jugadas de motor IA; memoizar cálculo para 60 FPS."
+    },
+    {
+      "id": "style",
+      "name": "Ayudante de Estilo & Arquetipo",
+      "role": "Evalúa la afinidad de jugadas candidatas frente a los patrones puros del jugador de 1.0 a 10.0.",
+      "metric": "Afinidad de estilo y arquetipo",
+      "orders": "Ponderar control de centro, desarrollo armonioso, preferencia de piezas menores y arquetipo personal."
+    },
+    {
+      "id": "openings",
+      "name": "Ayudante de Aperturas & Repertorio",
+      "role": "Identifica las líneas predilectas con blancas y negras del usuario y sus tasas de victoria.",
+      "metric": "Repertorio de aperturas y jugada predilecta",
+      "orders": "Detectar coincidencia de líneas tempranas (<16 ply) y bonificar continuidad del repertorio conocido."
+    },
+    {
+      "id": "mistakes",
+      "name": "Ayudante de Errores Recurrentes",
+      "role": "Rastrea patrones de equivocaciones frecuentes (salidas de dama prematuras, rey sin enroque).",
+      "metric": "Frecuencia y severidad de patrones de error",
+      "orders": "Activar alerta preventiva si una jugada candidata repite un descalabro registrado en partidas anteriores."
+    },
+    {
+      "id": "prophylaxis",
+      "name": "Ayudante de Profilaxis y Paciencia",
+      "role": "Mide la capacidad de maniobra, prevención de amenazas rivales y tiempo de espera antes de abrir.",
+      "metric": "Puntuación de paciencia profiláctica",
+      "orders": "Evaluar jugadas de resguardo, peones de desahogo y maniobras de consolidación antes de forzar rupturas."
+    },
+    {
+      "id": "tactics",
+      "name": "Ayudante de Táctica y Agresividad",
+      "role": "Calcula el porcentaje de juego ofensivo, capturas, jaques e iniciativa directa.",
+      "metric": "Densidad táctica y puntuación de agresividad",
+      "orders": "Calcular porcentaje de jugadas de contacto (jaques, capturas, amenazas) y acompasar al perfil del jugador."
+    },
+    {
+      "id": "time",
+      "name": "Ayudante de Tiempo y Ritmo",
+      "role": "Supervisa la cadencia de segundos por jugada para alertar de decisiones precipitadas o apuros.",
+      "metric": "Tiempo medio de reflexión y cadencia",
+      "orders": "Vigilar ritmo de juego; alertar ante jugadas impulsivas (<5s) en posiciones complejas."
+    },
+    {
+      "id": "endgame",
+      "name": "Ayudante de Transición y Finales",
+      "role": "Monitorea la efectividad en cambios de dama y transiciones a finales técnicos tras la jugada 30.",
+      "metric": "Frecuencia de finales y ritmo de simplificación",
+      "orders": "Detectar fase tardía (ply >= 30 o damas cambiadas) y priorizar activación de rey y apoyo a peones pasados."
+    }
+  ]
+}
