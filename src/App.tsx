@@ -33,7 +33,7 @@ import {
 import { ChessSupervisor, SupervisorState } from './engine/supervisor';
 import { runStockfishRecommendation } from './engine/stockfishEngine';
 import { realStockfish } from './engine/realStockfish';
-import { getNextTheoryMoves, lookupTheory } from './engine/theoryBook';
+import { getReliableTheoryMoves, lookupTheory } from './engine/theoryBook';
 import { cloneChessWithHistory } from './utils/chessClone';
 import { controlDirector, subDirector, GameReadinessReport } from './engine/controlDirector';
 import { playChessSound } from './utils/chessAudio';
@@ -218,7 +218,7 @@ export function App() {
 
       // 1) Apertura Teórica Magistral (<1ms, respuesta instantánea en aperturas)
       const history = chess.history();
-      const theoryMoves = getNextTheoryMoves(history);
+      const theoryMoves = getReliableTheoryMoves(chess);
       if (history.length < 10 && theoryMoves.length > 0) {
         const bookMove = legalMoves.find((m) => theoryMoves.includes(m.san));
         if (bookMove) {
@@ -748,8 +748,14 @@ export function App() {
               {/* Right Column: Engine Cards */}
               <div className="lg:col-span-6 xl:col-span-5 space-y-3">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Recomendaciones Multi-Motor
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <span>Recomendaciones Multi-Motor</span>
+                    {isRivalTurn && (
+                      <span className="text-[10px] text-emerald-400 font-normal normal-case px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Activos (flechas en tu turno)
+                      </span>
+                    )}
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">
                     {supervisorState.agreements.length > 0

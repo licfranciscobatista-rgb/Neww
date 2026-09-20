@@ -223,7 +223,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
             >
               <span className="text-xs font-bold text-emerald-400">Solo en mi turno</span>
               <span className="text-[10px] text-slate-400 mt-1 leading-tight">
-                0 lag. Pausa motores en turno rival y muestra solo líneas de tu bando.
+                Motores activos en segundo plano; flechas en tablero solo en tu turno.
               </span>
             </button>
 

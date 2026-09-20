@@ -1,3 +1,5 @@
+import type { Chess } from 'chess.js';
+
 export interface TheoryEntry {
   eco: string;
   name: string;
@@ -111,4 +113,22 @@ export function getNextTheoryMoves(sanMoves: string[]): string[] {
   }
 
   return Array.from(nextMoves);
+}
+
+/**
+ * Continuaciones de libro para el tablero REAL, solo si su historial es fiable.
+ *
+ * El libro trabaja con la lista de jugadas. Si el tablero se creó desde un FEN (partida cargada,
+ * copia sin historial…) la lista está vacía y el libro creería estar en la jugada 1: recomendaría
+ * e4/d4/c4/Nf3 en cualquier posición, incluso pasando por alto un mate en 1. Aquí se comprueba que
+ * el número de jugadas del historial coincide con el que indica el propio FEN antes de usar el libro.
+ */
+export function getReliableTheoryMoves(chess: Chess): string[] {
+  const history = chess.history();
+  const fields = chess.fen().split(' ');
+  const fullmove = parseInt(fields[5], 10);
+  if (!Number.isFinite(fullmove)) return [];
+  const expectedPlies = (fullmove - 1) * 2 + (fields[1] === 'b' ? 1 : 0);
+  if (history.length !== expectedPlies) return [];
+  return getNextTheoryMoves(history);
 }

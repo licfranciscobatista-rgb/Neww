@@ -1,6 +1,6 @@
 import { Chess, Square } from 'chess.js';
 import { EngineRecommendation } from '../types/chess';
-import { getNextTheoryMoves } from './theoryBook';
+import { getReliableTheoryMoves } from './theoryBook';
 
 export interface ScoredMove {
   move: string;
@@ -148,8 +148,7 @@ export function evaluateMovesStockfish(chess: Chess, _depth = 2): ScoredMove[] {
 
   const turn = chess.turn();
   const isWhite = turn === 'w';
-  const history = chess.history();
-  const theoryMoves = new Set(getNextTheoryMoves(history));
+  const theoryMoves = new Set(getReliableTheoryMoves(chess));
 
   const scoredMoves: ScoredMove[] = [];
 
@@ -253,7 +252,7 @@ export function evaluateMovesStockfish(chess: Chess, _depth = 2): ScoredMove[] {
 export function runStockfishRecommendation(chess: Chess): EngineRecommendation | null {
   const startTime = performance.now();
   const history = chess.history();
-  const theoryMoves = getNextTheoryMoves(history);
+  const theoryMoves = getReliableTheoryMoves(chess);
 
   // 1. Apertura Teórica Magistral (Primeras jugadas teóricas)
   if (history.length < 10 && theoryMoves.length > 0) {

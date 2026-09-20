@@ -1,10 +1,10 @@
 {
   "id": "maia",
   "name": "Maia Chess",
-  "version": "1.0",
+  "version": "3.0",
   "author": "University of Toronto / Maia Chess Project",
   "type": "neural-network-human-prediction",
-  "description": "Red neuronal entrenada sobre millones de partidas humanas para predecir jugadas según nivel Elo (1100, 1500, 1900).",
+  "description": "Maia 3 (CSSLab, Universidad de Toronto): red neuronal transformer que predice la jugada que elegiría un jugador de un Elo dado. Se ejecuta offline en un Web Worker si los pesos están instalados en /maia/maia3.json + /maia/maia3.bin (ver scripts/README-maia3.md). Si no están, la app usa una simulación heurística por Elo (maiaEngine.ts), que NO es una red neuronal.",
   "features": [
     "human-move-prediction",
     "elo-targeted-weights",
@@ -14,9 +14,11 @@
   ],
   "defaultElo": 1100,
   "supportedElos": [
+    600,
     1100,
     1500,
-    1900
+    1900,
+    2400
   ],
   "color": "#7c3aed",
   "badge": "M Maia",
@@ -39,5 +41,14 @@
       "tacticalDepth": 3,
       "description": "Juego posicional maduro con cálculo táctico limpio y alta consistencia."
     }
-  }
+  },
+  "files": {
+    "manifest": "/maia/engine.json",
+    "worker": "/maia/maia-worker.js",
+    "model": "/maia/maia3.json",
+    "weights": "/maia/maia3.bin"
+  },
+  "modelOptional": true,
+  "protocol": "worker-messages: init / run (frame 64x12, selfElo, oppoElo)",
+  "license": "AGPL-3.0 (código de Maia 3); revisar la licencia de los pesos en Hugging Face"
 }

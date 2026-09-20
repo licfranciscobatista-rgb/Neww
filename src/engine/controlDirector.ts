@@ -3,6 +3,8 @@ import mitt from 'mitt';
 import { EngineType } from '../types/chess';
 import { lookupTheory } from './theoryBook';
 import { realStockfish } from './realStockfish';
+import { realGarbo } from './realGarbo';
+import { realMaia } from './realMaia';
 import { runStockfishRecommendation } from './stockfishEngine';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
@@ -612,6 +614,38 @@ export class ControlDirectorManager {
       }
     } catch (e) {
       console.warn('[SubDirector] Diagnóstico WASM diferido:', e);
+    }
+
+    // GarboChess real (worker JavaScript propio)
+    try {
+      const garboReady = await realGarbo.init();
+      if (garboReady) {
+        const res = await realGarbo.analyze(
+          'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+          { movetime: 150 }
+        );
+        if (res && res.san) {
+          this.engineHealthChecks.garbo.version = 'GarboChess 6.0 JS (Worker Activo)';
+          this.engineHealthChecks.garbo.statusText = 'Instalado & Worker Activo';
+          this.engineHealthChecks.garbo.checksPassed[0] = `Worker GarboChess verificado: ${res.san} (prof. ${res.depth})`;
+        }
+      }
+    } catch (e) {
+      console.warn('[SubDirector] Diagnóstico de GarboChess diferido:', e);
+    }
+
+    // Maia 3 real (red neuronal): opcional, solo si los pesos están instalados en /maia/
+    try {
+      if (await realMaia.init()) {
+        const res = await realMaia.analyze('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', { selfElo: 1500 });
+        if (res && res.san) {
+          this.engineHealthChecks.maia.version = 'Maia 3 (red neuronal real)';
+          this.engineHealthChecks.maia.statusText = 'Instalado & Modelo Activo';
+          this.engineHealthChecks.maia.checksPassed[0] = `Modelo Maia 3 verificado: ${res.san} (${Math.round(res.probability * 100)}%, ${res.ms} ms)`;
+        }
+      }
+    } catch (e) {
+      console.warn('[SubDirector] Diagnóstico de Maia diferido:', e);
     }
 
     this.notifyTelemetry(gamesPlayedByUser);

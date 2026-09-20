@@ -73,9 +73,10 @@ export const SUBDIRECTOR_EMBEDDED_ENGINE_COPIES = {
   garbo: {
     id: 'garbo',
     name: 'GarboChess',
-    version: '3.0 Classical Positional',
+    version: '6.0 GarboChess (JavaScript)',
     files: [
       { path: '/garbo/engine.json', type: 'manifest' },
+      { path: '/garbo/garbochess.js', type: 'code_module' },
     ],
     maxTimeoutMs: 5000,
     maxRamMb: 15.0,

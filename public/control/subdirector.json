@@ -27,7 +27,8 @@
         "engine": "garbo",
         "manifestPath": "/garbo/engine.json",
         "binaryFiles": [
-          "/garbo/engine.json"
+          "/garbo/engine.json",
+          "/garbo/garbochess.js"
         ],
         "fallbackModule": "src/engine/garboEngine.ts (Positional Classic)",
         "zeroFailureGuarantee": true

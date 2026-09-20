@@ -59,65 +59,63 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
 }) => {
   return (
     <div className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-2 text-xs shadow-md">
-      {isRivalTurn ? (
-        <div className="flex items-center gap-2 text-slate-400 font-medium w-full justify-center py-0.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-400/80 animate-pulse" />
-          <span className="text-[11px]">
-            Turno rival ({rivalColorLabel}) • Motores en reposo (0 lag)
+      <div className="flex items-center justify-between w-full flex-wrap gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold text-slate-300">
+            Líneas activas en tablero:
           </span>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between w-full flex-wrap gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-slate-300">
-              Líneas activas en tablero:
+          {isRivalTurn ? (
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Motores activos • Flechas en tu turno ({rivalColorLabel})
             </span>
+          ) : (
             <span className="text-[10px] text-slate-500 hidden sm:inline">
               (toca para encender/apagar flechas)
             </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {(['stockfish', 'garbo', 'maia', 'personal'] as EngineType[]).map((eng) => {
-              const conf = ENGINE_CONFIG[eng];
-              const isActive = activeArrowFilter[eng];
-              const hasMove = !!recommendations[eng]?.move;
-              return (
-                <button
-                  key={eng}
-                  type="button"
-                  onClick={() => onToggleEngineFilter(eng)}
-                  title={`Alternar flecha de ${conf.text}`}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
-                    isActive
-                      ? 'shadow-sm'
-                      : 'opacity-40 grayscale border-slate-700 bg-slate-800/60 text-slate-400'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? conf.badgeBg : undefined,
-                    borderColor: isActive ? conf.badgeBorder : undefined,
-                    color: isActive ? '#ffffff' : undefined,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: conf.stroke }}
-                  />
-                  <span>{conf.label}</span>
-                  <span className="hidden sm:inline text-[10px] font-medium opacity-90">
-                    {conf.text}
-                  </span>
-                  {hasMove && (
-                    <span className="text-[10px] opacity-90 font-mono bg-black/30 px-1 py-0.2 rounded">
-                      {recommendations[eng]?.san}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          )}
         </div>
-      )}
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(['stockfish', 'garbo', 'maia', 'personal'] as EngineType[]).map((eng) => {
+            const conf = ENGINE_CONFIG[eng];
+            const isActive = activeArrowFilter[eng];
+            const hasMove = !!recommendations[eng]?.move;
+            return (
+              <button
+                key={eng}
+                type="button"
+                onClick={() => onToggleEngineFilter(eng)}
+                title={`Alternar flecha de ${conf.text}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                  isActive
+                    ? 'shadow-sm'
+                    : 'opacity-40 grayscale border-slate-700 bg-slate-800/60 text-slate-400'
+                }`}
+                style={{
+                  backgroundColor: isActive ? conf.badgeBg : undefined,
+                  borderColor: isActive ? conf.badgeBorder : undefined,
+                  color: isActive ? '#ffffff' : undefined,
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: conf.stroke }}
+                />
+                <span>{conf.label}</span>
+                <span className="hidden sm:inline text-[10px] font-medium opacity-90">
+                  {conf.text}
+                </span>
+                {hasMove && (
+                  <span className="text-[10px] opacity-90 font-mono bg-black/30 px-1 py-0.2 rounded">
+                    {recommendations[eng]?.san}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };

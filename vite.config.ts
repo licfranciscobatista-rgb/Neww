@@ -59,6 +59,14 @@ export default defineConfig(({mode}) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff,woff2,wasm}'],
           cleanupOutdatedCaches: true,
+          // Los pesos de Maia 3 (.bin, decenas de MB) no entran en el precache: se guardan en la primera carga
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/maia/') && url.pathname.endsWith('.bin'),
+              handler: 'CacheFirst',
+              options: { cacheName: 'maia-model', expiration: { maxEntries: 2 }, cacheableResponse: { statuses: [0, 200] } },
+            },
+          ],
         },
         devOptions: {
           enabled: true,

@@ -9,6 +9,8 @@ import {
 } from '../types/chess';
 import { evaluateMovesStockfish, runStockfishRecommendation } from './stockfishEngine';
 import { realStockfish } from './realStockfish';
+import { realGarbo, RealGarboAnalysis } from './realGarbo';
+import { realMaia, RealMaiaAnalysis } from './realMaia';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
@@ -35,11 +37,61 @@ export interface SupervisorState {
   personalProgress: string;
 }
 
+/** Convierte el análisis del GarboChess real en una recomendación para la interfaz. */
+function garboRecommendationFromReal(real: RealGarboAnalysis, explanationPrefix = 'GarboChess'): EngineRecommendation {
+  return {
+    engine: 'garbo',
+    engineName: 'GarboChess (JS real)',
+    move: real.uci,
+    san: real.san,
+    from: real.from,
+    to: real.to,
+    evaluation: real.scoreCp / 100,
+    evalDisplay: real.evalDisplay,
+    depth: real.depth,
+    explanation: `${explanationPrefix} (prof. ${real.depth}): ${real.san}. ${real.pv ? 'Línea: ' + real.pv.slice(0, 30) : ''}`,
+    color: '#059669',
+  };
+}
+
+/** Convierte el análisis del Maia 3 real en una recomendación para la interfaz. */
+function maiaRecommendationFromReal(real: RealMaiaAnalysis): EngineRecommendation {
+  const pct = (v: number) => Math.round(v * 100);
+  const alternatives = real.candidates
+    .slice(1, 4)
+    .map((c) => `${c.san} ${pct(c.prob)}%`)
+    .join(', ');
+  return {
+    engine: 'maia',
+    engineName: 'Maia 3 (red neuronal real)',
+    move: real.uci,
+    san: real.san,
+    from: real.from,
+    to: real.to,
+    evaluation: pct(real.win - real.loss),
+    evalDisplay: `Gana ${pct(real.win)}% · Tablas ${pct(real.draw)}% · Pierde ${pct(real.loss)}%`,
+    confidence: pct(real.probability),
+    humanProbability: Number(real.probability.toFixed(2)),
+    explanation:
+      `Maia 3 (Elo ${real.selfElo}): ${pct(real.probability)}% de los jugadores de este nivel eligen ${real.san}.` +
+      (alternatives ? ` Otras: ${alternatives}.` : ''),
+    color: '#7c3aed',
+    timeTakenMs: real.ms,
+    timestamp: Date.now(),
+  };
+}
+
+const isMaiaArrow = (a: CandidateArrow) => !!a.label && a.label.startsWith('M •');
+
+const isGarboArrow = (a: CandidateArrow) => !!a.label && (a.label.startsWith('GB') || a.label.startsWith('GarboChess'));
+
 export class ChessSupervisor {
   private state: SupervisorState;
   private onStateChange: (state: SupervisorState) => void;
   private lastProfile: PlayerProfile | null = null;
   private lastPositionKey = '';
+  private lastUserColor: 'w' | 'b' = 'w';
+  private lastShowLinesMode: 'my_turn_only' | 'both_turns' | 'none' = 'my_turn_only';
 
   constructor(onStateChange: (state: SupervisorState) => void) {
     this.onStateChange = onStateChange;
@@ -77,6 +129,21 @@ export class ChessSupervisor {
 
   public getState(): SupervisorState {
     return this.state;
+  }
+
+  public shouldSuppressArrows(fen?: string): boolean {
+    if (this.lastShowLinesMode === 'none') return true;
+    if (this.lastShowLinesMode === 'my_turn_only') {
+      try {
+        const targetFen = fen || this.state.fen;
+        if (!targetFen) return false;
+        const turn = new Chess(targetFen).turn();
+        return turn !== this.lastUserColor;
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
 
   public resetForNewGame(gameId: string): void {
@@ -129,6 +196,8 @@ export class ChessSupervisor {
       showLinesMode = 'my_turn_only',
     } = params;
     this.lastProfile = profile;
+    this.lastUserColor = userColor;
+    this.lastShowLinesMode = showLinesMode;
     const fen = chess.fen();
 
     // Deduplicación: onPositionChange se dispara desde varios sitios (jugada, efecto de React, reloj).
@@ -171,35 +240,10 @@ export class ChessSupervisor {
       return;
     }
 
-    // RIVAL'S TURN / SILENT CHECK:
-    // If showLinesMode is 'none', or if 'my_turn_only' and it is NOT the player's turn:
-    // DO NOT run any engines or calculate arrows. This completely prevents lag and avoids
-    // displaying unrequested lines during the opponent's turn.
-    const isSuppressed =
-      showLinesMode === 'none' ||
-      (showLinesMode === 'my_turn_only' && chess.turn() !== userColor);
-
-    if (isSuppressed) {
-      this.state = {
-        ...this.state,
-        fen,
-        isGameOver: false,
-        candidateArrows: [],
-        thinkingTime: null,
-        stockfishRequestedThisTurn: false,
-        garboRequestedThisTurn: false,
-        recommendations: {
-          stockfish: null,
-          garbo: null,
-          maia: null,
-          personal: null,
-          chessjs: null,
-        },
-        agreements: [],
-      };
-      this.onStateChange(this.state);
-      return;
-    }
+    // Los motores se mantienen SIEMPRE activos en segundo plano para evitar retrasos
+    // al volver al turno del jugador. Sin embargo, las flechas se ocultan en el turno rival
+    // para no saturar el tablero ni causar distracción.
+    const shouldSuppressArrows = this.shouldSuppressArrows(fen);
 
     const generation = this.state.generation + 1;
     const positionId = `${gameId}_${generation}`;
@@ -291,46 +335,49 @@ export class ChessSupervisor {
 
     // Compute candidate arrows for active engines
     // NOTA: Únicamente Stockfish, Garbo, Maia y Personal generan flechas; Chess.js es SIN flecha
+    // Si las flechas están suprimidas (ej. turno del rival), candidateArrows se mantiene vacío
     const arrows: CandidateArrow[] = [];
 
-    if (stockfishRec && stockfishRec.move) {
-      arrows.push({
-        from: stockfishRec.from,
-        to: stockfishRec.to,
-        label: `SF • ${stockfishRec.evalDisplay}`,
-        san: stockfishRec.san,
-        color: '#2563eb',
-      });
-    }
+    if (!shouldSuppressArrows) {
+      if (stockfishRec && stockfishRec.move) {
+        arrows.push({
+          from: stockfishRec.from,
+          to: stockfishRec.to,
+          label: `SF • ${stockfishRec.evalDisplay}`,
+          san: stockfishRec.san,
+          color: '#2563eb',
+        });
+      }
 
-    if (garboRec && garboRec.move) {
-      arrows.push({
-        from: garboRec.from,
-        to: garboRec.to,
-        label: `GB • ${garboRec.evalDisplay}`,
-        san: garboRec.san,
-        color: '#059669',
-      });
-    }
+      if (garboRec && garboRec.move) {
+        arrows.push({
+          from: garboRec.from,
+          to: garboRec.to,
+          label: `GB • ${garboRec.evalDisplay}`,
+          san: garboRec.san,
+          color: '#059669',
+        });
+      }
 
-    if (maiaRec && maiaRec.move) {
-      arrows.push({
-        from: maiaRec.from,
-        to: maiaRec.to,
-        label: `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
-        san: maiaRec.san,
-        color: '#7c3aed',
-      });
-    }
+      if (maiaRec && maiaRec.move) {
+        arrows.push({
+          from: maiaRec.from,
+          to: maiaRec.to,
+          label: `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
+          san: maiaRec.san,
+          color: '#7c3aed',
+        });
+      }
 
-    if (personalRec && personalRec.move && personalStatus.isUnlocked) {
-      arrows.push({
-        from: personalRec.from,
-        to: personalRec.to,
-        label: `MP • ${personalRec.evalDisplay}`,
-        san: personalRec.san,
-        color: '#d97706',
-      });
+      if (personalRec && personalRec.move && personalStatus.isUnlocked) {
+        arrows.push({
+          from: personalRec.from,
+          to: personalRec.to,
+          label: `MP • ${personalRec.evalDisplay}`,
+          san: personalRec.san,
+          color: '#d97706',
+        });
+      }
     }
 
     // Compute Agreements
@@ -416,14 +463,18 @@ export class ChessSupervisor {
           isMasterMove: true,
         };
 
-        const newArrows = this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF'));
-        newArrows.unshift({
-          from: refinedStockfishRec.from,
-          to: refinedStockfishRec.to,
-          label: `SF • ${refinedStockfishRec.evalDisplay}`,
-          san: refinedStockfishRec.san,
-          color: '#2563eb',
-        });
+        const shouldSuppress = this.shouldSuppressArrows(currentFen);
+        let newArrows: CandidateArrow[] = [];
+        if (!shouldSuppress) {
+          newArrows = this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF'));
+          newArrows.unshift({
+            from: refinedStockfishRec.from,
+            to: refinedStockfishRec.to,
+            label: `SF • ${refinedStockfishRec.evalDisplay}`,
+            san: refinedStockfishRec.san,
+            color: '#2563eb',
+          });
+        }
 
         const newRecs = {
           ...this.state.recommendations,
@@ -460,6 +511,110 @@ export class ChessSupervisor {
         this.onStateChange(this.state);
       })
       .catch(() => {});
+
+    // Refinar la recomendación de Garbo con el motor GarboChess real (su propio worker: corre en
+    // paralelo a Stockfish). Si no está disponible se conserva la heurística posicional de respaldo.
+    void this.refineGarboWithRealEngine(currentFen, currentGen);
+
+    // Igual con Maia: si el modelo real está instalado, sustituye a la simulación heurística.
+    void this.refineMaiaWithRealEngine(currentFen, currentGen, profile.maiaEloCalibration || 1100);
+  }
+
+  private computeAgreements(
+    recs: SupervisorState['recommendations']
+  ): Array<{ move: string; san: string; engines: EngineType[] }> {
+    const moveMap = new Map<string, { san: string; engines: EngineType[] }>();
+    const list: Array<[EngineType, EngineRecommendation | null]> = [
+      ['stockfish', recs.stockfish],
+      ['garbo', recs.garbo],
+      ['maia', recs.maia],
+      ['personal', recs.personal],
+    ];
+    for (const [engine, rec] of list) {
+      if (!rec || !rec.move) continue;
+      const existing = moveMap.get(rec.move);
+      if (existing) existing.engines.push(engine);
+      else moveMap.set(rec.move, { san: rec.san, engines: [engine] });
+    }
+    return Array.from(moveMap.entries())
+      .filter(([, d]) => d.engines.length > 1)
+      .map(([move, d]) => ({ move, san: d.san, engines: d.engines }));
+  }
+
+  private async refineMaiaWithRealEngine(fen: string, generation: number, elo: number): Promise<void> {
+    try {
+      const real = await realMaia.analyze(fen, { selfElo: elo });
+      if (!real) return;
+      if (this.state.generation !== generation || this.state.isGameOver) return;
+
+      const rec = maiaRecommendationFromReal(real);
+      const shouldSuppress = this.shouldSuppressArrows(fen);
+      let arrows: CandidateArrow[] = [];
+      if (!shouldSuppress) {
+        const arrow: CandidateArrow = {
+          from: rec.from,
+          to: rec.to,
+          label: `M • ${Math.round((rec.humanProbability || 0) * 100)}% humana`,
+          san: rec.san,
+          color: '#7c3aed',
+        };
+
+        arrows = [...this.state.candidateArrows];
+        const idx = arrows.findIndex(isMaiaArrow);
+        if (idx >= 0) arrows[idx] = arrow;
+        else arrows.push(arrow);
+      }
+
+      const recommendations = { ...this.state.recommendations, maia: rec };
+      this.state = {
+        ...this.state,
+        recommendations,
+        candidateArrows: arrows,
+        agreements: this.computeAgreements(recommendations),
+      };
+      this.onStateChange(this.state);
+    } catch {
+      // Se conserva la simulación heurística de respaldo
+    }
+  }
+
+  private async refineGarboWithRealEngine(fen: string, generation: number): Promise<void> {
+    try {
+      const real = await realGarbo.analyze(fen, { movetime: 400 });
+      if (!real) return;
+      // La posición cambió mientras se pensaba: el resultado ya no sirve
+      if (this.state.generation !== generation || this.state.isGameOver) return;
+
+      const rec = garboRecommendationFromReal(real);
+      const shouldSuppress = this.shouldSuppressArrows(fen);
+      let arrows: CandidateArrow[] = [];
+      if (!shouldSuppress) {
+        const arrow: CandidateArrow = {
+          from: rec.from,
+          to: rec.to,
+          label: `GB • ${rec.evalDisplay}`,
+          san: rec.san,
+          color: '#059669',
+        };
+
+        // La flecha se reemplaza en su sitio para no alterar el orden de dibujo de las demás
+        arrows = [...this.state.candidateArrows];
+        const idx = arrows.findIndex(isGarboArrow);
+        if (idx >= 0) arrows[idx] = arrow;
+        else arrows.push(arrow);
+      }
+
+      const recommendations = { ...this.state.recommendations, garbo: rec };
+      this.state = {
+        ...this.state,
+        recommendations,
+        candidateArrows: arrows,
+        agreements: this.computeAgreements(recommendations),
+      };
+      this.onStateChange(this.state);
+    } catch {
+      // Se conserva la recomendación posicional de respaldo
+    }
   }
 
   public async requestStockfishUse(chess: Chess): Promise<void> {
@@ -528,7 +683,7 @@ export class ChessSupervisor {
     this.onStateChange(this.state);
   }
 
-  public requestGarboUse(chess: Chess): void {
+  public async requestGarboUse(chess: Chess): Promise<void> {
     if (this.state.garboRemainingUses <= 0) return;
 
     this.state.loadingStates.garbo = true;
@@ -536,10 +691,30 @@ export class ChessSupervisor {
 
     const startTime = performance.now();
     const remaining = this.state.garboRemainingUses - 1;
-    const rec = runGarboRecommendation(chess);
+    const generationAtRequest = this.state.generation;
+
+    let rec: EngineRecommendation | null = null;
+    try {
+      const real = await realGarbo.analyze(chess.fen(), { movetime: 800 });
+      if (real) rec = garboRecommendationFromReal(real, 'GarboChess (a demanda)');
+    } catch {
+      // se usa la heurística de respaldo
+    }
+    if (!rec) rec = runGarboRecommendation(chess);
     const duration = performance.now() - startTime;
 
     controlDirector.watchEngineExecution('garbo', duration);
+
+    // Mientras el motor pensaba se jugó otra jugada: solo se descuenta el uso, sin mostrar una flecha vieja
+    if (this.state.generation !== generationAtRequest) {
+      this.state = {
+        ...this.state,
+        garboRemainingUses: remaining,
+        loadingStates: { ...this.state.loadingStates, garbo: false },
+      };
+      this.onStateChange(this.state);
+      return;
+    }
 
     // Add arrow if not already present
     const updatedArrows = [...this.state.candidateArrows];

@@ -77,14 +77,6 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
       );
     }
 
-    if (isRivalTurn) {
-      return (
-        <div className="text-center py-2.5 px-3 rounded-lg bg-slate-900/50 border border-slate-800/80 text-[11px] text-slate-400">
-          Turno rival • Motor pausado (0 lag)
-        </div>
-      );
-    }
-
     if (!rec || !rec.move) {
       if (remainingUses !== undefined && remainingUses > 0 && onRequest) {
         return (
@@ -93,15 +85,22 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
               Activación bajo demanda ({timeLimitText || 'Máx 15s'})
             </p>
             <button
+              disabled={isRivalTurn}
               onClick={onRequest}
               className={`w-full py-2 px-3 rounded-lg text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] ${
-                engineKey === 'stockfish'
+                isRivalTurn
+                  ? 'bg-slate-800/50 text-slate-500 border border-slate-700/50 cursor-not-allowed'
+                  : engineKey === 'stockfish'
                   ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
                   : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30'
               }`}
             >
               <Play className="w-3.5 h-3.5 fill-white" />
-              <span>Consultar {engineKey === 'stockfish' ? 'Stockfish' : 'GarboChess'} ({remainingUses} restantes)</span>
+              <span>
+                {isRivalTurn
+                  ? `${engineKey === 'stockfish' ? 'Stockfish' : 'GarboChess'} activo (turno rival)`
+                  : `Consultar ${engineKey === 'stockfish' ? 'Stockfish' : 'GarboChess'} (${remainingUses} restantes)`}
+              </span>
             </button>
           </div>
         );
@@ -110,6 +109,8 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         <div className="text-center py-3 text-xs text-slate-400">
           {remainingUses === 0
             ? 'Límite de usos alcanzado para esta partida'
+            : isRivalTurn
+            ? 'Motor activo • Analizando tablero...'
             : 'Esperando solicitud de jugada'}
         </div>
       );
@@ -149,11 +150,16 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
 
         {onApplyRecommendationMove && (
           <button
-            onClick={() => onApplyRecommendationMove(rec.move, engineKey)}
-            className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.99]"
+            disabled={isRivalTurn}
+            onClick={() => !isRivalTurn && onApplyRecommendationMove(rec.move, engineKey)}
+            className={`w-full py-2 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm ${
+              isRivalTurn
+                ? 'bg-slate-800/40 border-slate-700/40 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-600 hover:border-slate-500 text-white active:scale-[0.99]'
+            }`}
           >
-            <span>Mover {instr.pieceName} a {rec.to.toUpperCase()}</span>
-            <ArrowRight className="w-3.5 h-3.5 text-sky-400" />
+            <span>{isRivalTurn ? 'Esperando tu turno...' : `Mover ${instr.pieceName} a ${rec.to.toUpperCase()}`}</span>
+            {!isRivalTurn && <ArrowRight className="w-3.5 h-3.5 text-sky-400" />}
           </button>
         )}
       </div>
