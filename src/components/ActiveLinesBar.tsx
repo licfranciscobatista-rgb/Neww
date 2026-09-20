@@ -7,6 +7,8 @@ interface ActiveLinesBarProps {
   onToggleEngineFilter: (engine: EngineType) => void;
   isRivalTurn?: boolean;
   rivalColorLabel?: string;
+  indicatorStyle?: 'dot' | 'arrow';
+  onToggleIndicatorStyle?: () => void;
 }
 
 const ENGINE_CONFIG: Record<
@@ -56,22 +58,49 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
   onToggleEngineFilter,
   isRivalTurn,
   rivalColorLabel = 'Rival',
+  indicatorStyle = 'dot',
+  onToggleIndicatorStyle,
 }) => {
   return (
     <div className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-2 text-xs shadow-md">
       <div className="flex items-center justify-between w-full flex-wrap gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-bold text-slate-300">
-            Líneas activas en tablero:
+            Líneas en tablero:
           </span>
+
+          {onToggleIndicatorStyle && (
+            <button
+              type="button"
+              onClick={onToggleIndicatorStyle}
+              title={
+                indicatorStyle === 'dot'
+                  ? 'Modo Punto activo: Mínimo impacto gráfico, ideal para partidas con reloj. Toca para cambiar a flecha.'
+                  : 'Modo Flecha activo: Flechas completas en tablero. Toca para cambiar a punto sin lag.'
+              }
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                indicatorStyle === 'dot'
+                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
+                  : 'bg-indigo-950/80 border-indigo-500/50 text-indigo-300'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full inline-block ${
+                  indicatorStyle === 'dot' ? 'bg-emerald-400' : 'bg-indigo-400'
+                }`}
+              />
+              <span>{indicatorStyle === 'dot' ? 'Modo Punto (Rápido)' : 'Modo Flechas'}</span>
+            </button>
+          )}
+
           {isRivalTurn ? (
             <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Motores activos • Flechas en tu turno ({rivalColorLabel})
+              Tu turno ({rivalColorLabel})
             </span>
           ) : (
             <span className="text-[10px] text-slate-500 hidden sm:inline">
-              (toca para encender/apagar flechas)
+              (toca para encender/apagar motores)
             </span>
           )}
         </div>

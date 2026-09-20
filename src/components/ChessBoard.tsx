@@ -14,6 +14,7 @@ interface ChessBoardProps {
   lastMove?: { from: string; to: string } | null;
   interactive?: boolean;
   isRivalTurn?: boolean;
+  indicatorStyle?: 'dot' | 'arrow';
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -92,6 +93,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   lastMove,
   interactive = true,
   isRivalTurn = false,
+  indicatorStyle = 'dot',
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
@@ -228,7 +230,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 key={square}
                 id={`square-${square}`}
                 onClick={() => handleSquareClick(square)}
-                className={`relative flex items-center justify-center cursor-pointer transition-colors duration-150 ${
+                className={`relative flex items-center justify-center cursor-pointer select-none ${
                   isLight ? 'bg-[#eeeed2]' : 'bg-[#769656]'
                 } ${isLastMove ? 'after:absolute after:inset-0 after:bg-yellow-400/35' : ''} ${
                   isSelected ? 'after:absolute after:inset-0 after:bg-blue-500/40 after:ring-4 after:ring-blue-400' : ''
@@ -265,7 +267,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                 {piece && (
                   <span
-                    className={`relative z-20 text-3xl sm:text-4xl md:text-5xl font-serif select-none transition-transform duration-100 hover:scale-105 ${
+                    className={`relative z-20 text-3xl sm:text-4xl md:text-5xl font-serif select-none pointer-events-none ${
                       piece.color === 'w'
                         ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
                         : 'text-stone-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)]'
@@ -360,6 +362,55 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           const end = getSquareCoordinates(group.to);
           const isMultiple = group.engines.length > 1;
 
+          const primaryEngine = group.engines[0];
+          const primaryColor = ENGINE_COLORS[primaryEngine];
+          const strokeColor = isMultiple ? '#0284c7' : primaryColor.stroke;
+          const fillColor = isMultiple ? '#0284c7' : primaryColor.fill;
+
+          // MODO PUNTO (Punto ultra-ligero de destino solicitado para juegos contrareloj sin lag)
+          if (indicatorStyle === 'dot') {
+            return (
+              <g key={`dot-${group.from}-${group.to}-${idx}`}>
+                {/* Halo pulsante de destino */}
+                <circle
+                  cx={end.x}
+                  cy={end.y}
+                  r="38"
+                  fill={fillColor}
+                  fillOpacity="0.22"
+                  stroke={strokeColor}
+                  strokeWidth="2"
+                  strokeDasharray="4 3"
+                />
+
+                {/* Punto concéntrico exacto de jugada */}
+                <circle
+                  cx={end.x}
+                  cy={end.y}
+                  r="15"
+                  fill={strokeColor}
+                  fillOpacity="0.95"
+                  stroke="#ffffff"
+                  strokeWidth="2.5"
+                />
+
+                {/* Indicador de inicial o motor */}
+                <text
+                  x={end.x}
+                  y={end.y + 4}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="bold"
+                  fill="#ffffff"
+                  className="select-none pointer-events-none"
+                >
+                  {isMultiple ? '★' : primaryColor.label}
+                </text>
+              </g>
+            );
+          }
+
+          // MODO FLECHA COMPLETA (flechas tradicionales para análisis estático)
           const dx = end.x - start.x;
           const dy = end.y - start.y;
           const length = Math.sqrt(dx * dx + dy * dy);
@@ -369,11 +420,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           const targetX = end.x - (dx / length) * shortenEnd;
           const targetY = end.y - (dy / length) * shortenEnd;
 
-          const primaryEngine = group.engines[0];
-          const primaryColor = ENGINE_COLORS[primaryEngine];
           const markerId = isMultiple ? 'arrow-multi' : `arrow-${primaryEngine}`;
-          const strokeColor = isMultiple ? '#0284c7' : primaryColor.stroke;
-          const fillColor = isMultiple ? '#0284c7' : primaryColor.fill;
 
           // Compute pill badge coordinates with edge guards
           const pillWidth = 58;

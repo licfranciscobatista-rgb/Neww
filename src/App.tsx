@@ -89,6 +89,9 @@ export function App() {
   // Sound settings
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Indicator style on board: 'dot' (modo punto ligero ultra rápido para partidas contra reloj) o 'arrow'
+  const [boardIndicatorStyle, setBoardIndicatorStyle] = useState<'dot' | 'arrow'>('dot');
+
   // Line recommendation preferences (default: only on player turn to eliminate lag)
   const [showLinesMode, setShowLinesMode] = useState<ShowLinesMode>('my_turn_only');
 
@@ -734,6 +737,7 @@ export function App() {
                   lastMove={lastMove}
                   interactive={!chess.isGameOver()}
                   isRivalTurn={isRivalTurn}
+                  indicatorStyle={boardIndicatorStyle}
                 />
 
                 <ActiveLinesBar
@@ -742,6 +746,10 @@ export function App() {
                   onToggleEngineFilter={handleToggleArrow}
                   isRivalTurn={isRivalTurn}
                   rivalColorLabel={chess.turn() === 'w' ? 'Blancas' : 'Negras'}
+                  indicatorStyle={boardIndicatorStyle}
+                  onToggleIndicatorStyle={() =>
+                    setBoardIndicatorStyle((prev) => (prev === 'dot' ? 'arrow' : 'dot'))
+                  }
                 />
 
                 <GameControls
