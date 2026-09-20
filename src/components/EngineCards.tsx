@@ -12,7 +12,6 @@ import {
   Lock,
   Layers,
   ShieldCheck,
-  AlertCircle,
 } from 'lucide-react';
 import { EngineRecommendation, EngineType } from '../types/chess';
 import { getDirectMoveInstruction } from '../utils/moveInstruction';
@@ -57,7 +56,6 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   const garboRec = recommendations.garbo;
   const maiaRec = recommendations.maia;
   const personalRec = recommendations.personal;
-  const chessjsRec = recommendations.chessjs;
 
   const renderMoveBox = (
     rec: EngineRecommendation | null,
@@ -222,7 +220,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
-        {/* GarboChess */}
+        {/* GarboChess (Recomendación Teórica Posicional) */}
         <div className="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-emerald-500/60">
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -232,7 +230,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-200">GarboChess</h4>
-                  <p className="text-[10px] text-emerald-400 font-medium">IA Secundaria (Máx 5s)</p>
+                  <p className="text-[10px] text-emerald-400 font-medium">Recomendación Teórica Posicional</p>
                 </div>
               </div>
 
@@ -246,15 +244,10 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 >
                   {garboRemainingUses}/5 usos
                 </span>
-                <button
-                  onClick={() => onToggleArrow('garbo')}
-                  className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
-                    arrowFilter.garbo ? 'text-emerald-400' : 'opacity-40'
-                  }`}
-                  title="Activar/desactivar flecha de Garbo"
-                >
-                  {arrowFilter.garbo ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                </button>
+                <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 flex items-center gap-1 font-medium">
+                  <EyeOff className="w-3 h-3 text-slate-500" />
+                  <span>Teórica</span>
+                </span>
               </div>
             </div>
 
@@ -275,7 +268,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
-        {/* Maia 3 (Modelo Neuronal Humano, Calibrado 500 a 2400 Elo) */}
+        {/* Maia 3 (Modelo Neuronal Humano con Flecha) */}
         <div className="bg-slate-900/90 border border-purple-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-purple-500/60">
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -312,6 +305,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 )}
 
                 <button
+                  type="button"
                   onClick={() => onToggleArrow('maia')}
                   className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
                     arrowFilter.maia ? 'text-purple-400' : 'opacity-40'
@@ -432,54 +426,6 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             </span>
             <span className="font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40 shrink-0">
               {personalEngineUnlocked ? 'Afinidad Estilo' : `${personalProgress} jugadas`}
-            </span>
-          </div>
-        </div>
-
-        {/* Chess.js: Árbitro de Reglas & Detector de Jugada Dudosa (~ -1.00) (Sin Flecha) */}
-        <div className="sm:col-span-2 bg-slate-900/90 border border-rose-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-rose-500/50">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <AlertCircle className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h4 className="text-xs font-bold text-slate-200">Chess.js</h4>
-                    <span className="text-[9px] bg-rose-950/60 text-rose-300 font-semibold px-1.5 py-0.5 rounded border border-rose-800/50">
-                      Reglas Oficiales FEN
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-rose-300/80 font-medium">Pérdida Posicional (-0.9 a -1.0) • Pieza Segura (Sin pérdidas de material)</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-950/60 text-rose-300 border-rose-700/50">
-                  {chessjsRec?.evalDisplay || '-0.9 a -1.0 pts'}
-                </span>
-                <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 flex items-center gap-1 font-medium">
-                  <EyeOff className="w-3 h-3 text-slate-500" />
-                  <span>Sin flecha</span>
-                </span>
-              </div>
-            </div>
-
-            {renderMoveBox(
-              chessjsRec,
-              loadingStates.chessjs,
-              'Chess.js evaluando tablero FEN...',
-              'chessjs'
-            )}
-          </div>
-
-          <div className="pt-2 mt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
-            <span className="truncate max-w-[320px]">
-              {chessjsRec?.explanation || 'Movimiento pasivo o vacilación que cede puntuación sin regalar piezas'}
-            </span>
-            <span className="font-mono text-rose-400 font-bold bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-800/40 shrink-0">
-              {chessjsRec ? 'Pieza Segura' : 'FEN Reglas'}
             </span>
           </div>
         </div>

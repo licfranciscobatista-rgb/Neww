@@ -46,15 +46,12 @@ import { HumanityVerdictModal } from './components/HumanityVerdictModal';
 import { NewGameModal, NewGameOptions, ShowLinesMode } from './components/NewGameModal';
 import { FinishGameModal, GameResultType } from './components/FinishGameModal';
 import { HistoryView } from './components/HistoryView';
-import { AnalysisSuiteView, SuiteSubTab } from './components/AnalysisSuiteView';
 import { ProfileView } from './components/ProfileView';
 import { ControlView } from './components/ControlView';
-import { InstallModal } from './components/InstallModal';
 import { OfflineIndicator, useOnlineStatus } from './components/OfflineIndicator';
-import { PWAInstallButton } from './components/PWAInstallButton';
 import { HumanityVerdictResult } from './engine/humanityVerdict';
 
-type ActiveTab = 'board' | 'history' | 'suite' | 'profile' | 'control';
+type ActiveTab = 'board' | 'history' | 'profile' | 'control';
 
 // Fuerza del rival en partidas contra la IA (Elo calibrado de Stockfish real: mín. 1320, máx. 3190)
 const AI_OPPONENT_ELO = 1500;
@@ -82,14 +79,12 @@ export function App() {
   // Modals
   const [isNewGameModalOpen, setIsNewGameModalOpen] = useState(false);
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [verdictModalData, setVerdictModalData] = useState<{ san: string; verdict: HumanityVerdictResult } | null>(null);
   const [checkmateNotice, setCheckmateNotice] = useState<string | null>(null);
 
-  // Selected game for analysis tab
+  // Selected game for metrics inspection
   const [selectedAnalysisGame, setSelectedAnalysisGame] = useState<GameRecord | null>(null);
   const [selectedAnalysisReport, setSelectedAnalysisReport] = useState<GameAnalysisReport | null>(null);
-  const [suiteSubTab, setSuiteSubTab] = useState<SuiteSubTab>('audit');
 
   // Sound settings
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -97,12 +92,12 @@ export function App() {
   // Line recommendation preferences (default: only on player turn to eliminate lag)
   const [showLinesMode, setShowLinesMode] = useState<ShowLinesMode>('my_turn_only');
 
-  // Engine arrow filters
+  // Engine arrow filters (Stockfish, Maia y Personal con flechas; Garbo como recomendación teórica)
   const [arrowFilter, setArrowFilter] = useState<Record<EngineType, boolean>>({
     stockfish: true,
-    garbo: true,
-    maia: true,
     personal: true,
+    maia: true,
+    garbo: false,
     chessjs: false, // Chess.js es sin flecha según directiva
   });
 
@@ -529,8 +524,7 @@ export function App() {
     setSelectedAnalysisGame(game);
     const existingReport = reports.find((r) => r.gameId === game.id);
     setSelectedAnalysisReport(existingReport || null);
-    setSuiteSubTab('audit');
-    setActiveTab('suite');
+    setActiveTab('control');
   };
 
   return (
@@ -552,15 +546,12 @@ export function App() {
               </span>
             </div>
             <p className="text-[10px] text-slate-400 hidden sm:block">
-              Ajedrez multi-motor con red neuronal Maia y preparación para APK nativo Android
+              Ajedrez multi-motor con red neuronal Maia y motor personal
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* APK Direct Action Button */}
-          <PWAInstallButton variant="header" />
-
           {/* New Game Button */}
           <button
             onClick={() => setIsNewGameModalOpen(true)}
@@ -604,18 +595,6 @@ export function App() {
         </button>
 
         <button
-          onClick={() => handleTabChange('suite')}
-          className={`px-3 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'suite'
-              ? 'border-sky-400 text-sky-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Suite Análisis</span>
-        </button>
-
-        <button
           onClick={() => handleTabChange('profile')}
           className={`px-3 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
             activeTab === 'profile'
@@ -636,7 +615,7 @@ export function App() {
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span>Control Motores</span>
+          <span>Control & Métricas</span>
         </button>
       </nav>
 
@@ -801,28 +780,6 @@ export function App() {
           />
         )}
 
-        {activeTab === 'suite' && (
-          <AnalysisSuiteView
-            games={games}
-            reports={reports}
-            profile={profile}
-            selectedGame={selectedAnalysisGame}
-            selectedReport={selectedAnalysisReport}
-            chess={chess}
-            initialSubTab={suiteSubTab}
-            onUpdateReport={(r) => {
-              setSelectedAnalysisReport(r);
-              setReports((prev) => [r, ...prev.filter((rep) => rep.gameId !== r.gameId)]);
-            }}
-            onBackToBoard={() => setActiveTab('board')}
-            onSelectGameToAudit={(g) => {
-              setSelectedAnalysisGame(g);
-              const rep = reports.find((r) => r.gameId === g.id);
-              setSelectedAnalysisReport(rep || null);
-            }}
-          />
-        )}
-
         {activeTab === 'profile' && (
           <ProfileView
             profile={profile}
@@ -838,9 +795,6 @@ export function App() {
         )}
       </main>
 
-      {/* Floating APK Install Button for Android */}
-      <PWAInstallButton variant="floating" />
-
       {/* Offline Alert Indicator */}
       <OfflineIndicator />
 
@@ -849,11 +803,6 @@ export function App() {
         isOpen={isNewGameModalOpen}
         onClose={() => setIsNewGameModalOpen(false)}
         onStartGame={handleStartNewGame}
-      />
-
-      <InstallModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
       />
 
       <FinishGameModal

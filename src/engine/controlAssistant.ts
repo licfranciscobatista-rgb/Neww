@@ -1,5 +1,5 @@
 import mitt from 'mitt';
-import { EngineHealthMap } from './engineWorkloadMonitor';
+import { EngineHealthMap } from './director/engineWorkloadMonitor';
 
 export interface ControlTelemetry {
   totalProcessed: number;

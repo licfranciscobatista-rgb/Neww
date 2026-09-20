@@ -87,7 +87,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   recommendations,
   candidateArrows = [],
   agreements,
-  activeArrowFilter = { stockfish: true, garbo: true, maia: true, personal: true, chessjs: false },
+  activeArrowFilter = { stockfish: true, personal: true, garbo: false, maia: false, chessjs: false },
   onToggleEngineFilter,
   lastMove,
   interactive = true,
@@ -184,7 +184,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const list: ArrowRenderItem[] = [];
     const moveKeyMap = new Map<string, ArrowRenderItem>();
-    const engineOrder: EngineType[] = ['stockfish', 'garbo', 'maia', 'personal'];
+    // Stockfish, Maia y Motor Personal dibujan flechas en el tablero; Garbo permanece como recomendación teórica
+    const engineOrder: EngineType[] = ['stockfish', 'maia', 'personal'];
 
     for (const eng of engineOrder) {
       if (!activeArrowFilter[eng]) continue;

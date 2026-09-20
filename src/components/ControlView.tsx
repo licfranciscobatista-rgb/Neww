@@ -4,37 +4,25 @@ import {
   Cpu,
   Zap,
   Server,
-  Radio,
   CheckCircle,
-  AlertCircle,
   Clock,
   Shield,
   Layers,
   HelpCircle,
-  FileText,
-  UserCheck,
-  Brain,
-  Sparkles,
   Lock,
   BookOpen,
   Timer,
   Compass,
   Database,
-  Search,
   RefreshCw,
-  Sliders,
 } from 'lucide-react';
 import {
   controlDirector,
   DirectorTelemetry,
-  StockfishAuditLog,
-  MaiaHumanityLog,
-  ChessJsRulesEngine,
-  EngineHealthCheck,
 } from '../engine/controlDirector';
 import { loadPlayerProfile, loadGameRecords } from '../storage/chessStorage';
 import { DirectorCommandConsole } from './control/DirectorCommandConsole';
-import { EngineBenchTesterCard } from './control/EngineBenchTesterCard';
+import { MetricsAndPerformanceCard } from './control/MetricsAndPerformanceCard';
 import { ControlJsonInspector } from './control/ControlJsonInspector';
 import { SubDirectorEngineAuditorCard } from './control/SubDirectorEngineAuditorCard';
 
@@ -44,17 +32,6 @@ export const ControlView: React.FC = () => {
   const [telemetry, setTelemetry] = useState<DirectorTelemetry>(() =>
     controlDirector.getTelemetry(profile.gamesPlayed || games.length)
   );
-  const [sfLogs, setSfLogs] = useState<StockfishAuditLog[]>(() => controlDirector.getStockfishLogs());
-  const [maiaLogs, setMaiaLogs] = useState<MaiaHumanityLog[]>(() => controlDirector.getMaiaLogs());
-  const [activeLogTab, setActiveLogTab] = useState<'stockfish' | 'maia'>('stockfish');
-  const [analyzedLogId, setAnalyzedLogId] = useState<string | null>(null);
-  const [chessJsAnalysis, setChessJsAnalysis] = useState<{
-    validPgnVerified: boolean;
-    bookMovesCount: number;
-    outOfBookPliesCount: number;
-    openingDetected: string;
-    verificationLatencyMs: number;
-  } | null>(null);
   const [isVerifyingEngines, setIsVerifyingEngines] = useState(false);
   const [lastCheckMessage, setLastCheckMessage] = useState<string | null>(null);
 
@@ -74,27 +51,11 @@ export const ControlView: React.FC = () => {
 
   useEffect(() => {
     const handleTelemetry = (t: DirectorTelemetry) => setTelemetry(t);
-    const handleSfLog = (l: StockfishAuditLog) => setSfLogs((prev) => [l, ...prev.slice(0, 19)]);
-    const handleMaiaLog = (l: MaiaHumanityLog) => setMaiaLogs((prev) => [l, ...prev.slice(0, 19)]);
-
     controlDirector.on('telemetry', handleTelemetry);
-    controlDirector.on('stockfishLogAdded', handleSfLog);
-    controlDirector.on('maiaLogAdded', handleMaiaLog);
-
     return () => {
       controlDirector.off('telemetry', handleTelemetry);
-      controlDirector.off('stockfishLogAdded', handleSfLog);
-      controlDirector.off('maiaLogAdded', handleMaiaLog);
     };
   }, []);
-
-  const handleAnalyzeWithChessJs = (logId: string) => {
-    setAnalyzedLogId(logId);
-    // Standard game moves sample from the audited record
-    const sampleMoves = ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6', 'Be3', 'e5'];
-    const analysis = ChessJsRulesEngine.analyzeRegistryLog(sampleMoves);
-    setChessJsAnalysis(analysis);
-  };
 
   const { interventionsBreakdown, independentModules } = telemetry;
 
@@ -298,8 +259,8 @@ export const ControlView: React.FC = () => {
       {/* Auditor de Archivos y Certificación Pre-Vuelo del Sub-Director */}
       <SubDirectorEngineAuditorCard onNotify={(msg) => setLastCheckMessage(msg)} />
 
-      {/* Banco de Pruebas de Cálculo en Vivo para Motores */}
-      <EngineBenchTesterCard />
+      {/* Módulo Unificado de Métricas & Rendimiento (Aperturas, Motores y Carga de Trabajo) */}
+      <MetricsAndPerformanceCard games={games} profile={profile} />
 
       {/* Inspector de Archivos .JSON de Configuración del Sistema */}
       <ControlJsonInspector />
@@ -452,154 +413,6 @@ export const ControlView: React.FC = () => {
             );
           })}
         </div>
-      </div>
-
-      {/* Registros Separados: Stockfish (al apagarse) & Maia, Analizados por Chess.js */}
-      <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <div>
-              <h3 className="font-bold text-white text-xs">Registros Separados de Análisis</h3>
-              <p className="text-[10px] text-slate-400">
-                Stockfish (entregado antes de apagarse) y Maia • Analizados en velocidad por Chess.js
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 self-start sm:self-auto">
-            <button
-              onClick={() => {
-                setActiveLogTab('stockfish');
-                setChessJsAnalysis(null);
-                setAnalyzedLogId(null);
-              }}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                activeLogTab === 'stockfish'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Registro Stockfish ({sfLogs.length})
-            </button>
-            <button
-              onClick={() => {
-                setActiveLogTab('maia');
-                setChessJsAnalysis(null);
-                setAnalyzedLogId(null);
-              }}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                activeLogTab === 'maia'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Registro Maia ({maiaLogs.length})
-            </button>
-          </div>
-        </div>
-
-        {/* Display logs */}
-        {activeLogTab === 'stockfish' ? (
-          <div className="space-y-2">
-            <p className="text-[11px] text-slate-400">
-              Reportes entregados por Stockfish al concluir la auditoría en Historial antes de apagarse:
-            </p>
-            <div className="space-y-1.5 max-h-56 overflow-y-auto">
-              {sfLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-white block">Auditoría Partida ({log.plyCount} plies)</span>
-                    <span className="text-[10px] text-slate-400">
-                      Precisión Blancas: {log.accuracyWhite}% • Negras: {log.accuracyBlack}% • Blunders: {log.blundersCount}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleAnalyzeWithChessJs(log.id)}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-bold border border-slate-700 flex items-center gap-1 transition-colors"
-                    >
-                      <Search className="w-3 h-3" />
-                      <span>Analizar con Chess.js</span>
-                    </button>
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-950 text-blue-300 border border-blue-800">
-                      {log.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-[11px] text-slate-400">
-              Registros de estimación de probabilidad humana por rangos Elo y detección de anomalías:
-            </p>
-            <div className="space-y-1.5 max-h-56 overflow-y-auto">
-              {maiaLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-white block">Calibración Elo {log.targetElo}</span>
-                    <span className="text-[10px] text-slate-400">
-                      Probabilidad humana media: {log.averageHumanProbability}% • Anomalías: {log.anomaliesDetected}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleAnalyzeWithChessJs(log.id)}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[10px] font-bold border border-slate-700 flex items-center gap-1 transition-colors"
-                    >
-                      <Search className="w-3 h-3" />
-                      <span>Analizar con Chess.js</span>
-                    </button>
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-950 text-purple-300 border border-purple-800">
-                      MAIA_HUMAN_TRACE
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Modal / Inline Card: Chess.js Log Analysis Result */}
-        {chessJsAnalysis && (
-          <div className="p-3 bg-slate-950 border border-emerald-800/80 rounded-xl space-y-2 animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-emerald-300 text-xs flex items-center gap-1.5">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                Análisis Rápido de Registro ejecutado por Chess.js (Aislado de Motores)
-              </span>
-              <span className="font-mono text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-700">
-                Latencia: {chessJsAnalysis.verificationLatencyMs} ms
-              </span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
-              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                <span className="text-slate-400 text-[10px] block">Apertura Validada:</span>
-                <span className="text-white font-bold">{chessJsAnalysis.openingDetected}</span>
-              </div>
-              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                <span className="text-slate-400 text-[10px] block">Jugadas de Libro (Chess.js):</span>
-                <span className="text-emerald-400 font-bold font-mono">{chessJsAnalysis.bookMovesCount} plies</span>
-              </div>
-              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                <span className="text-slate-400 text-[10px] block">Jugadas Fuera de Libro:</span>
-                <span className="text-slate-200 font-bold font-mono">{chessJsAnalysis.outOfBookPliesCount} plies</span>
-              </div>
-              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                <span className="text-slate-400 text-[10px] block">Integridad PGN:</span>
-                <span className="text-emerald-300 font-bold">100% Válido</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import {
   Layers,
   Search,
   CheckCircle,
+  BarChart3,
 } from 'lucide-react';
 import { GameRecord } from '../types/chess';
 import { saveGameRecord, deleteGameRecord } from '../storage/chessStorage';
@@ -234,10 +235,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <button
                   onClick={() => onAnalyzeGame(game)}
                   className="px-2.5 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-600/40 rounded-lg font-bold flex items-center gap-1 transition-colors text-[11px]"
-                  title="Auditar partida completa con cálculo objetivo"
+                  title="Ver métricas y rendimiento en Control"
                 >
-                  <Trophy className="w-3.5 h-3.5" />
-                  <span>Analizar</span>
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Métricas</span>
                 </button>
 
                 <button

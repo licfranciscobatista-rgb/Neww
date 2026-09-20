@@ -133,7 +133,8 @@ class RealStockfishManager {
       const onInitMessage = (e: MessageEvent) => {
         const line = typeof e.data === 'string' ? e.data.trim() : '';
         if (line === 'uciok') {
-          worker.postMessage('setoption name Hash value 32');
+          // 16 MB Hash: ideal para tablets de 2-3 GB de RAM para evitar saturación de memoria
+          worker.postMessage('setoption name Hash value 16');
           worker.postMessage('setoption name Threads value 1');
           worker.postMessage('isready');
         } else if (line === 'readyok') {

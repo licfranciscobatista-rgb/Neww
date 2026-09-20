@@ -14,7 +14,6 @@ import { realMaia, RealMaiaAnalysis } from './realMaia';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
-import { runChessJsRecommendation } from './chessjsEngine';
 import { controlDirector, subDirector } from './controlDirector';
 import { loadGameRecords } from '../storage/chessStorage';
 
@@ -286,17 +285,17 @@ export class ChessSupervisor {
     // Check personal engine status (STRICT 10 GAMES RULE)
     const personalStatus = getPersonalEngineStatus(profile, storedGames);
 
-    // 1. Run Stockfish
+    // 1. Run Stockfish (Recomendación principal con flechas)
     const sfStart = performance.now();
     const stockfishRec = runStockfishRecommendation(chess);
     controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
 
-    // 2. Run GarboChess
+    // 2. GarboChess: Recomendación Teórica Posicional (evaluación heurística inmediata y ligera, sin lanzar worker en cada jugada)
     const garboStart = performance.now();
     const garboRec = runGarboRecommendation(chess);
     controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
 
-    // 3. Run Maia (Human neural model, calibrated from 500 to 2400 Elo)
+    // 3. Maia: Recomendación Teórica Humana (evaluación heurística rápida según el Elo calibrado, sin saturar la RAM con modelos pesados)
     const maiaStart = performance.now();
     const maiaRec = runMaiaRecommendation(
       chess,
@@ -304,7 +303,7 @@ export class ChessSupervisor {
     );
     controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
 
-    // 4. Motor Personal: ONLY if >= 10 games played by user!
+    // 4. Motor Personal: ONLY if >= 10 games played by user! (Con flechas en el tablero)
     let personalRec: EngineRecommendation | null = null;
     if (personalStatus.isUnlocked) {
       const pStart = performance.now();
@@ -321,21 +320,11 @@ export class ChessSupervisor {
       controlDirector.watchEngineExecution('personal', performance.now() - pStart);
     }
 
-    // 5. Motor Chess.js: Identifica el tablero por FEN y busca una jugada dudosa (~ -1.00)
-    // REGLA ESTRICTA DEL USUARIO: "pero sin flecha" -> NO se dibuja flecha para Chess.js en el tablero
-    const otherEngineMoves: string[] = [];
-    if (stockfishRec?.move) otherEngineMoves.push(stockfishRec.move);
-    if (garboRec?.move) otherEngineMoves.push(garboRec.move);
-    if (maiaRec?.move) otherEngineMoves.push(maiaRec.move);
-    if (personalRec?.move) otherEngineMoves.push(personalRec.move);
-
-    const cjsStart = performance.now();
-    const chessjsRec = runChessJsRecommendation(chess, otherEngineMoves);
-    controlDirector.watchEngineExecution('chessjs', performance.now() - cjsStart);
+    // 5. Chess.js: Eliminada la recomendación según directiva para máxima fluidez en tablets de 3GB de RAM
+    const chessjsRec = null;
 
     // Compute candidate arrows for active engines
-    // NOTA: Únicamente Stockfish, Garbo, Maia y Personal generan flechas; Chess.js es SIN flecha
-    // Si las flechas están suprimidas (ej. turno del rival), candidateArrows se mantiene vacío
+    // DIRECTIVA DEL USUARIO: "la flecha siempre sea stockfish y que las recomendaciones de los otros sean solo teoricas (...) deja solo 2 motores el personal y stockfish con flechas"
     const arrows: CandidateArrow[] = [];
 
     if (!shouldSuppressArrows) {
@@ -346,16 +335,6 @@ export class ChessSupervisor {
           label: `SF • ${stockfishRec.evalDisplay}`,
           san: stockfishRec.san,
           color: '#2563eb',
-        });
-      }
-
-      if (garboRec && garboRec.move) {
-        arrows.push({
-          from: garboRec.from,
-          to: garboRec.to,
-          label: `GB • ${garboRec.evalDisplay}`,
-          san: garboRec.san,
-          color: '#059669',
         });
       }
 
@@ -512,12 +491,8 @@ export class ChessSupervisor {
       })
       .catch(() => {});
 
-    // Refinar la recomendación de Garbo con el motor GarboChess real (su propio worker: corre en
-    // paralelo a Stockfish). Si no está disponible se conserva la heurística posicional de respaldo.
-    void this.refineGarboWithRealEngine(currentFen, currentGen);
-
-    // Igual con Maia: si el modelo real está instalado, sustituye a la simulación heurística.
-    void this.refineMaiaWithRealEngine(currentFen, currentGen, profile.maiaEloCalibration || 1100);
+    // Garbo y Maia actúan como recomendaciones teóricas directas (evaluación heurística inmediata sin workers en segundo plano)
+    // para preservar al 100% la memoria RAM (3GB) y CPU en tablets.
   }
 
   private computeAgreements(

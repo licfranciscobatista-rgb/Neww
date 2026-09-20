@@ -77,7 +77,7 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {(['stockfish', 'garbo', 'maia', 'personal'] as EngineType[]).map((eng) => {
+          {(['stockfish', 'maia', 'personal'] as EngineType[]).map((eng) => {
             const conf = ENGINE_CONFIG[eng];
             const isActive = activeArrowFilter[eng];
             const hasMove = !!recommendations[eng]?.move;
