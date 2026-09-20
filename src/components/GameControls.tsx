@@ -2,6 +2,7 @@ import React from 'react';
 import { Chess } from 'chess.js';
 import {
   RotateCcw,
+  Undo2,
   Volume2,
   VolumeX,
   Repeat,
@@ -22,6 +23,8 @@ interface GameControlsProps {
   onFlipBoard: () => void;
   onNewGame: () => void;
   onResetPosition: () => void;
+  onUndoMove?: () => void;
+  canUndo?: boolean;
   onFinishGame?: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -36,6 +39,8 @@ export const GameControls: React.FC<GameControlsProps> = ({
   onFlipBoard,
   onNewGame,
   onResetPosition,
+  onUndoMove,
+  canUndo = false,
   onFinishGame,
   soundEnabled,
   onToggleSound,
@@ -99,6 +104,22 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <RotateCcw className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Reiniciar</span>
         </button>
+
+        {onUndoMove && (
+          <button
+            onClick={onUndoMove}
+            disabled={!canUndo}
+            className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${
+              canUndo
+                ? 'bg-amber-950/70 hover:bg-amber-900 border-amber-600/50 text-amber-200 shadow-sm'
+                : 'bg-slate-900/60 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
+            }`}
+            title={canUndo ? 'Deshacer última jugada' : 'No hay jugadas para deshacer'}
+          >
+            <Undo2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>Deshacer</span>
+          </button>
+        )}
 
         {onFinishGame && (
           <button

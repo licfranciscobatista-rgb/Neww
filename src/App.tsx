@@ -425,6 +425,41 @@ export function App() {
     triggerSupervisor(fresh);
   };
 
+  const handleUndoMove = () => {
+    handleConsultControl();
+    const history = chess.history({ verbose: true });
+    if (history.length === 0) return;
+
+    // Si estamos jugando contra la IA y fue turno de la IA o del usuario, deshacemos según corresponda:
+    // Si la última jugada fue de la IA (2 jugadas en total: la del usuario y la respuesta de la IA),
+    // retrocedemos 2 jugadas para que vuelva a ser el turno del usuario.
+    // Si es modo manual o tablero libre, retrocedemos 1 jugada.
+    let pliesToUndo = 1;
+    if (gameMode === 'vs_ai') {
+      // Si la IA ya respondió, deshacemos ambas (la del usuario y la de la IA)
+      if (chess.turn() === userColor && history.length >= 2) {
+        pliesToUndo = 2;
+      } else {
+        pliesToUndo = 1;
+      }
+    }
+
+    const remainingPlies = history.slice(0, history.length - pliesToUndo);
+    const rebuiltChess = new Chess();
+    for (const m of remainingPlies) {
+      rebuiltChess.move({ from: m.from, to: m.to, promotion: m.promotion });
+    }
+
+    const updatedMoves = movesList.slice(0, movesList.length - pliesToUndo);
+    const lastRemaining = remainingPlies.length > 0 ? remainingPlies[remainingPlies.length - 1] : null;
+
+    setChess(rebuiltChess);
+    setMovesList(updatedMoves);
+    setLastMove(lastRemaining ? { from: lastRemaining.from, to: lastRemaining.to, san: lastRemaining.san } : null);
+    setCheckmateNotice(null);
+    triggerSupervisor(rebuiltChess);
+  };
+
   const handleFinishGame = () => {
     // Si la partida no tiene jugadas, simplemente reiniciar tablero
     if (movesList.length === 0) {
@@ -716,6 +751,8 @@ export function App() {
                   onFlipBoard={handleFlipBoard}
                   onNewGame={() => setIsNewGameModalOpen(true)}
                   onResetPosition={handleResetPosition}
+                  onUndoMove={handleUndoMove}
+                  canUndo={movesList.length > 0}
                   onFinishGame={handleFinishGame}
                   soundEnabled={soundEnabled}
                   onToggleSound={() => setSoundEnabled(!soundEnabled)}
