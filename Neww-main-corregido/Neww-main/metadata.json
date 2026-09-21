@@ -1,6 +1,0 @@
-{
-  "name": "Jugada Offline 3.2 - Ajedrez Personal",
-  "description": "Sistema de ajedrez personal offline con cuatro recomendaciones independientes (Stockfish, GarboChess, Maia y Motor Personal), Supervisor y análisis diferido.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
