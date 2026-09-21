@@ -718,6 +718,7 @@ export class ControlDirectorManager {
 
   public getTelemetry(gamesPlayedByUser = 0): DirectorTelemetry {
     const personalUnlocked = gamesPlayedByUser >= 10;
+    this.memoryAllocations.personal.status = personalUnlocked ? 'ACTIVE' : 'LOCKED_NEED_10_GAMES';
     const totalAllocatedRam = Object.values(this.memoryAllocations).reduce(
       (sum, m) => sum + m.allocatedMb,
       0

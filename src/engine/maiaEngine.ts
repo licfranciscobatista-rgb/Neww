@@ -129,6 +129,8 @@ export function runMaiaRecommendation(
   }> = [];
 
   const turn = chess.turn();
+  const opponentColor = turn === 'w' ? 'b' : 'w';
+  const historyPlies = chess.history().length;
 
   for (const m of legalMoves) {
     let logit = 50;
@@ -137,13 +139,8 @@ export function runMaiaRecommendation(
 
     const pieceType = m.piece;
     const isCapture = !!m.captured;
-    const isCheck = chess.inCheck() ? false : false; // we check after move
+    const givesCheck = m.san.includes('+') || m.san.includes('#');
     const isCastling = m.san === 'O-O' || m.san === 'O-O-O';
-
-    // Test board position after move
-    const testBoard = new Chess(chess.fen());
-    testBoard.move(m.san);
-    const givesCheck = testBoard.inCheck();
 
     // 1. Capturas (Altamente atractivas para humanos)
     if (isCapture && m.captured) {
@@ -215,7 +212,7 @@ export function runMaiaRecommendation(
     }
 
     // 6. Ataques prematuros de Dama en apertura (Qh5, Qf3, etc.)
-    if (pieceType === 'q' && chess.history().length < 8 && !isCapture) {
+    if (pieceType === 'q' && historyPlies < 8 && !isCapture) {
       if (eloCalibration <= 800) {
         logit += 40; // Intentos tempranos de mate pastor o ataques de dama
         rationale = rationale || `Salida agresiva de dama típica de principiantes (${eloCalibration} Elo)`;
@@ -225,8 +222,9 @@ export function runMaiaRecommendation(
     }
 
     // 7. Seguridad de la pieza que mueve (Evitar o cometer colgadas)
-    const opponentMoves = testBoard.moves({ verbose: true });
-    const isTargetSquareAttacked = opponentMoves.some((om) => om.to === m.to);
+    chess.move(m);
+    const isTargetSquareAttacked = chess.isAttacked(m.to as Square, opponentColor);
+    chess.undo();
 
     if (isTargetSquareAttacked && !isCapture) {
       // La casilla a la que vamos está atacada

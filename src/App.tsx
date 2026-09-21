@@ -166,38 +166,55 @@ export function App() {
     [gameId, profile, games, userColor, gameMode, showLinesMode]
   );
 
-  // Initialize supervisor, consult control director, and preload real Stockfish WASM on mount
+  // Initialize supervisor, consult control director, and preload real Stockfish WASM on mount or new game
   useEffect(() => {
     handleConsultControl();
     triggerSupervisor(chess);
     void realStockfish.init();
-  }, [handleConsultControl, triggerSupervisor, chess]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
-  // Clock countdown timer
+  const accumulatedClockMsRef = useRef(0);
+  const lastClockTickRef = useRef<number>(Date.now());
+
+  // Precision timestamp-based clock timer (eliminates 1-second drift and survives rapid moves)
   useEffect(() => {
     if (!isClockRunning || chess.isGameOver()) return;
 
+    lastClockTickRef.current = Date.now();
+
     const interval = setInterval(() => {
-      if (chess.turn() === 'w') {
-        setWhiteTime((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setIsClockRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      } else {
-        setBlackTime((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setIsClockRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
+      const now = Date.now();
+      accumulatedClockMsRef.current += now - lastClockTickRef.current;
+      lastClockTickRef.current = now;
+
+      if (accumulatedClockMsRef.current >= 1000) {
+        const wholeSecs = Math.floor(accumulatedClockMsRef.current / 1000);
+        accumulatedClockMsRef.current %= 1000;
+
+        if (chess.turn() === 'w') {
+          setWhiteTime((prev) => {
+            const next = prev - wholeSecs;
+            if (next <= 0) {
+              clearInterval(interval);
+              setIsClockRunning(false);
+              return 0;
+            }
+            return next;
+          });
+        } else {
+          setBlackTime((prev) => {
+            const next = prev - wholeSecs;
+            if (next <= 0) {
+              clearInterval(interval);
+              setIsClockRunning(false);
+              return 0;
+            }
+            return next;
+          });
+        }
       }
-    }, 1000);
+    }, 250);
 
     return () => clearInterval(interval);
   }, [isClockRunning, chess]);
@@ -398,6 +415,8 @@ export function App() {
     setShowLinesMode(options.showLinesMode);
     setMovesList([]);
     setLastMove(null);
+    accumulatedClockMsRef.current = 0;
+    lastClockTickRef.current = Date.now();
     setWhiteTime(options.timeControlSeconds || 600);
     setBlackTime(options.timeControlSeconds || 600);
     setIsClockRunning(false);

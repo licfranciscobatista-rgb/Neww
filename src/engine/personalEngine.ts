@@ -217,7 +217,7 @@ export function getPersonalEngineStatus(
       rawBytes: 0,
       distilledBytes: 0,
       assistantsCount: 8,
-      statusMessage: 'Calibrando motor personal...',
+      statusMessage: 'Bloqueado: Requiere 10 partidas para calibrar tu estilo.',
       distilledData: HistoryAssistant.analyzeAndDistill([]),
     };
   }
@@ -232,7 +232,8 @@ export interface PersonalRecommendationParams {
 /**
  * MOTOR PERSONAL (AISLADO DE LOS MOTORES DE AJEDREZ Y DE CONTROL)
  * Funciona de manera 100% independiente con sus 8 ayudantes de estilo, memoria y patrones.
- * Regla estricta: NO da recomendaciones hasta alcanzar 10 partidas jugadas manualmente por el usuario.
+ * Regla estricta: NO da recomendaciones hasta alcanzar 10 partidas jugadas por el usuario.
+ * Ahorra 100% de CPU y RAM mientras no esté calibrado.
  * Arquitectura Blindada: Garantía de cero caídas (Zero-Crash Fallback).
  */
 export function runPersonalRecommendation(
@@ -243,10 +244,9 @@ export function runPersonalRecommendation(
   if (!chess) return null;
 
   try {
-    // REGLA ESTRICTA: Requiere al menos 10 partidas jugadas manualmente por el usuario
     const status = getPersonalEngineStatus(profile, games);
     if (!status.isUnlocked) {
-      return null; // NO recommendation allowed before 10 games
+      return null; // Motor inactivo: no procesa ni gasta recursos sin partidas
     }
 
     const legalMoves = chess.moves({ verbose: true });
@@ -255,8 +255,12 @@ export function runPersonalRecommendation(
     const distilled = status.distilledData;
     const historyPlies = chess.history().length;
 
-    // 1. Consulta y telemetría agregada de los 8 ayudantes analíticos
-    const repertoire = OpeningRepertoireAssistant.getRepertoireSummary(distilled);
+    // 1. Pre-cálculo de conjuntos para evitar bucles O(N*M) en el bucle principal
+    const knownOpeningMoves = new Set(
+      distilled.userMoves.filter((um) => um.ply < 16).map((um) => um.san)
+    );
+
+    // Consulta y telemetría agregada de los ayudantes analíticos
     const tacticsAggression = TacticsAggressionAssistant.calculateSummary(distilled);
     const prophylaxis = ProphylaxisPatienceAssistant.calculateSummary(distilled);
     const endgame = EndgameTransitionAssistant.calculateSummary(distilled);
@@ -274,12 +278,9 @@ export function runPersonalRecommendation(
       const extraNotes: string[] = [];
 
       // 2. Ayudante de Aperturas & Repertorio: En fase inicial (ply < 16), bonificar jugadas del repertorio del usuario
-      if (historyPlies < 16 && repertoire.topList.length > 0) {
-        const isKnownMove = distilled.userMoves.some((um) => um.san === m.san && um.ply < 16);
-        if (isKnownMove) {
-          moveScore += 1.4;
-          extraNotes.push('Apertura habitual');
-        }
+      if (historyPlies < 16 && knownOpeningMoves.has(m.san)) {
+        moveScore += 1.4;
+        extraNotes.push('Apertura habitual');
       }
 
       // 3. Ayudante de Táctica & Agresividad: Bonificar si el usuario tiene afinidad de ataque y la jugada es activa

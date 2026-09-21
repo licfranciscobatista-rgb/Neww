@@ -102,7 +102,27 @@ export class HistoryAssistant {
         const pgnLength = (game.pgn || '').length;
         rawBytes += Math.max(pgnLength, (game.moves?.length || 0) * 120);
 
-        const moves = game.moves || [];
+        let moves = game.moves || [];
+        // Soporte integral: si game.moves viene vacío pero existe game.pgn, parsear los movimientos directamente del PGN
+        if (moves.length === 0 && game.pgn) {
+          try {
+            const pgnChess = new Chess();
+            pgnChess.loadPgn(game.pgn);
+            const historyVerbose = pgnChess.history({ verbose: true });
+            moves = historyVerbose.map((m, idx) => ({
+              from: m.from,
+              to: m.to,
+              san: m.san,
+              ply: idx + 1,
+              source: 'MANUAL' as const,
+              thinkTime: 10,
+              timestamp: Date.now(),
+            }));
+          } catch {
+            // Ignorar errores si el PGN está malformado
+          }
+        }
+
         const hasManualMoves = moves.some((m) => m && m.source === 'MANUAL');
         if (hasManualMoves || moves.length > 0) {
           manualGamesCount++;
@@ -133,17 +153,11 @@ export class HistoryAssistant {
             continue;
           }
 
-          // Filtrar jugadas de libro automáticas tempranas para no contaminar el ADN
+          // Anotar si la posición pertenece a teoría de aperturas pero NO descartar las jugadas elegidas por el usuario
           const historySoFar = tempChess.history();
           const theory = lookupTheory(historySoFar);
           if (theory.isBook && i < 8) {
             discardedBookCount++;
-            try {
-              tempChess.move(m.san || { from: m.from, to: m.to });
-            } catch {
-              // Tolerancia total a errores en datos históricos
-            }
-            continue;
           }
 
           // Registrar ÚNICAMENTE jugadas manuales del usuario
@@ -209,11 +223,16 @@ export class HistoryAssistant {
           }
         }
 
-        if (game.openingName) {
-          const cur = openingStats.get(game.openingName) || { count: 0, wins: 0 };
+        const detectedOpeningName =
+          game.openingName ||
+          (game as any).opening ||
+          lookupTheory(tempChess.history()).openingName;
+
+        if (detectedOpeningName && detectedOpeningName !== 'Partida Abierta / Variante Personal') {
+          const cur = openingStats.get(detectedOpeningName) || { count: 0, wins: 0 };
           cur.count += 1;
           if (isWin) cur.wins += 1;
-          openingStats.set(game.openingName, cur);
+          openingStats.set(detectedOpeningName, cur);
         }
       }
 
@@ -305,7 +324,7 @@ export class StyleAssistant {
     distilled: DistilledUserData
   ): { score: number; explanation: string } {
     try {
-      if (!distilled || distilled.manualGamesCount < 10 || distilled.userMoves.length === 0) {
+      if (!distilled || distilled.manualGamesCount < 10) {
         return { score: 5.0, explanation: 'Calibración insuficiente (<10 partidas del jugador).' };
       }
 
@@ -360,7 +379,10 @@ export class StyleAssistant {
       const finalScore = Math.min(9.8, Math.max(1.0, Number(score.toFixed(1))));
       return {
         score: finalScore,
-        explanation: `Afinidad estilística ${finalScore}/10 calibrada con tus ${distilled.manualGamesCount} partidas.`,
+        explanation:
+          distilled.manualGamesCount > 0
+            ? `Afinidad estilística ${finalScore}/10 calibrada con tus ${distilled.manualGamesCount} partida(s).`
+            : `Afinidad estilística inicial ${finalScore}/10 (calibrándose dinámicamente).`,
       };
     } catch {
       return { score: 6.0, explanation: 'Afinidad general posicional calculada con seguridad.' };
@@ -375,10 +397,10 @@ export class StyleAssistant {
   } {
     if (!distilled || distilled.manualGamesCount === 0) {
       return {
-        archetype: 'Sin calibrar',
-        description: 'Requiere jugar partidas manuales para medir tus preferencias de juego.',
-        aggressiveness: 0,
-        patience: 0,
+        archetype: 'Equilibrado Adaptativo',
+        description: 'Perfil activo desde el primer movimiento. Aprende y se calibra progresivamente.',
+        aggressiveness: 50,
+        patience: 50,
       };
     }
 

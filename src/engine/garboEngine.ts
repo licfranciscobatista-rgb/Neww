@@ -7,9 +7,8 @@ import { evaluateMovesStockfish, ScoredMove } from './stockfishEngine';
  * Prefers harmonious piece development, king safety (castling), center pawns,
  * and penalizes premature queen wanderings or repeated piece moves.
  */
-function scorePositionalGarbo(chess: Chess, move: ScoredMove): number {
+function scorePositionalGarbo(san: string, to: string, baseScore: number, historyPlies: number): number {
   let bonus = 0;
-  const san = move.san;
 
   // 1. Castling king safety (classical Garbo principle)
   if (san === 'O-O' || san === 'O-O-O') {
@@ -17,7 +16,7 @@ function scorePositionalGarbo(chess: Chess, move: ScoredMove): number {
   }
 
   // 2. Center pawn control (e4, d4, c4, e5, d5, c5)
-  if (['e4', 'd4', 'c4', 'e5', 'd5', 'c5'].includes(move.to)) {
+  if (['e4', 'd4', 'c4', 'e5', 'd5', 'c5'].includes(to)) {
     bonus += 25;
   }
 
@@ -27,8 +26,7 @@ function scorePositionalGarbo(chess: Chess, move: ScoredMove): number {
   }
 
   // 4. Discourage premature Queen maneuvers in the opening (first 10 moves)
-  const history = chess.history();
-  if (history.length < 16 && san.startsWith('Q') && !san.includes('x')) {
+  if (historyPlies < 16 && san.startsWith('Q') && !san.includes('x')) {
     bonus -= 35;
   }
 
@@ -37,7 +35,7 @@ function scorePositionalGarbo(chess: Chess, move: ScoredMove): number {
     bonus += 15;
   }
 
-  return move.score + bonus;
+  return baseScore + bonus;
 }
 
 export function runGarboRecommendation(
@@ -48,6 +46,7 @@ export function runGarboRecommendation(
   if (candidates.length === 0) return null;
 
   const top = stockfishBest || candidates[0];
+  const historyPlies = chess.history().length;
 
   // Evaluate candidate moves with Garbo's positional heuristic
   // Only consider moves within tactical safety tolerance (<= 120 centipawns of top move)
@@ -57,7 +56,7 @@ export function runGarboRecommendation(
   // Sort pool by Garbo positional score
   const garboScored = pool.map((m) => ({
     ...m,
-    garboScore: scorePositionalGarbo(chess, m),
+    garboScore: scorePositionalGarbo(m.san, m.to, m.score, historyPlies),
   }));
   garboScored.sort((a, b) => b.garboScore - a.garboScore);
 

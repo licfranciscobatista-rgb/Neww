@@ -282,7 +282,25 @@ export class ChessSupervisor {
           : 'Fase de maniobra posicional: desarrolla armoniosamente.',
     };
 
-    // Check personal engine status (STRICT 10 GAMES RULE)
+    // Optimización crítica para tablet de 3GB:
+    // Si las flechas deben suprimirse (ej. turno del rival en modo solo mi turno, o líneas desactivadas),
+    // NO calcular motores pesados ni lanzar Stockfish WASM en el turno del rival.
+    if (shouldSuppressArrows) {
+      this.state = {
+        ...this.state,
+        gameId,
+        positionId,
+        generation,
+        fen,
+        isGameOver: false,
+        candidateArrows: [],
+        thinkingTime: null,
+      };
+      this.onStateChange(this.state);
+      return;
+    }
+
+    // Check personal engine status (Desbloqueado desde partida 0)
     const personalStatus = getPersonalEngineStatus(profile, storedGames);
 
     // 1. Run Stockfish (Recomendación principal con flechas)
@@ -290,12 +308,12 @@ export class ChessSupervisor {
     const stockfishRec = runStockfishRecommendation(chess);
     controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
 
-    // 2. GarboChess: Recomendación Teórica Posicional (evaluación heurística inmediata y ligera, sin lanzar worker en cada jugada)
+    // 2. GarboChess: Recomendación Teórica Posicional
     const garboStart = performance.now();
     const garboRec = runGarboRecommendation(chess);
     controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
 
-    // 3. Maia: Recomendación Teórica Humana (evaluación heurística rápida según el Elo calibrado, sin saturar la RAM con modelos pesados)
+    // 3. Maia: Recomendación Teórica Humana
     const maiaStart = performance.now();
     const maiaRec = runMaiaRecommendation(
       chess,
@@ -303,7 +321,7 @@ export class ChessSupervisor {
     );
     controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
 
-    // 4. Motor Personal: ONLY if >= 10 games played by user! (Con flechas en el tablero)
+    // 4. Motor Personal: Disponible y adaptándose activamente (Con flechas en el tablero)
     let personalRec: EngineRecommendation | null = null;
     if (personalStatus.isUnlocked) {
       const pStart = performance.now();
@@ -324,7 +342,6 @@ export class ChessSupervisor {
     const chessjsRec = null;
 
     // Compute candidate arrows for active engines
-    // DIRECTIVA DEL USUARIO: "la flecha siempre sea stockfish y que las recomendaciones de los otros sean solo teoricas (...) deja solo 2 motores el personal y stockfish con flechas"
     const arrows: CandidateArrow[] = [];
 
     if (!shouldSuppressArrows) {
