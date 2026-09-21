@@ -181,6 +181,9 @@ export const loadGameRecords = loadGameHistory;
 
 export function saveGameRecord(record: GameRecord): void {
   try {
+    // Invalida inmediatamente el caché de destilación para forzar recálculo puro
+    HistoryAssistant.clearCache();
+
     const games = loadGameHistory();
     const updated = [record, ...games.filter((g) => g.id !== record.id)];
     localStorage.setItem(GAMES_KEY, JSON.stringify(updated.slice(0, 100)));
@@ -196,6 +199,7 @@ export function saveGameRecord(record: GameRecord): void {
 
 export function deleteGameRecord(id: string): void {
   try {
+    HistoryAssistant.clearCache();
     const games = loadGameHistory();
     const updated = games.filter((g) => g.id !== id);
     localStorage.setItem(GAMES_KEY, JSON.stringify(updated));

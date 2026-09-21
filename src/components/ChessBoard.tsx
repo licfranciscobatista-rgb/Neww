@@ -186,8 +186,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const list: ArrowRenderItem[] = [];
     const moveKeyMap = new Map<string, ArrowRenderItem>();
-    // Stockfish, Maia y Motor Personal dibujan flechas en el tablero; Garbo permanece como recomendación teórica
-    const engineOrder: EngineType[] = ['stockfish', 'maia', 'personal'];
+    // Stockfish, Maia y Motor Personal dibujan flechas en el tablero; Chess.js como advertencia de jugada dudosa
+    const engineOrder: EngineType[] = ['stockfish', 'maia', 'personal', 'chessjs'];
 
     for (const eng of engineOrder) {
       if (!activeArrowFilter[eng]) continue;
@@ -343,6 +343,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             orient="auto-start-reverse"
           >
             <path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706" />
+          </marker>
+          <marker
+            id="arrow-chessjs"
+            viewBox="0 0 10 10"
+            refX="7"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#fb7185" />
           </marker>
           <marker
             id="arrow-multi"

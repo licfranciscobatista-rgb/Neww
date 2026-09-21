@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import { GameRecord } from '../types/chess';
-import { lookupTheory } from './theoryBook';
+import { lookupTheory, distillBookMove } from './theoryBook';
 
 export interface DistilledMoveData {
   san: string;
@@ -11,6 +11,8 @@ export interface DistilledMoveData {
   thinkTimeSeconds: number;
   fenBefore: string;
   isOpening: boolean;
+  isBookMove?: boolean;
+  bookOpeningName?: string;
   isCapture: boolean;
   isCheck: boolean;
   isProphylactic: boolean;
@@ -25,6 +27,7 @@ export interface DistilledUserData {
   userMoves: DistilledMoveData[];
   discardedIaMovesCount: number;
   discardedBookMovesCount: number;
+  distilledAutonomousMovesCount: number;
   topOpenings: Array<{ name: string; count: number; wins: number }>;
   averageThinkTime: number;
   aggressionScore: number;
@@ -71,9 +74,10 @@ export class HistoryAssistant {
         return this.getEmptyDistilledData();
       }
 
-      // Generar clave de caché ultrarrápida
-      const lastGame = games[games.length - 1];
-      const currentKey = `${games.length}_${lastGame?.id || ''}_${lastGame?.moves?.length || 0}_${lastGame?.result || ''}`;
+      // Generar clave de caché ultrarrápida pero estricta e infalible
+      const lastGame = games[0]; // Las partidas se ordenan con la más reciente primero
+      const allIds = games.map((g) => `${g.id}_${g.moves?.length || 0}_${g.result || ''}`).join('|');
+      const currentKey = `${games.length}_${allIds}`;
       if (this.cachedResult && this.cacheKey === currentKey) {
         return this.cachedResult;
       }
@@ -82,6 +86,7 @@ export class HistoryAssistant {
       let distilledBytes = 0;
       let discardedIaCount = 0;
       let discardedBookCount = 0;
+      let autonomousMovesCount = 0;
       const userMoves: DistilledMoveData[] = [];
       const openingStats = new Map<string, { count: number; wins: number }>();
       let manualGamesCount = 0;
@@ -153,16 +158,23 @@ export class HistoryAssistant {
             continue;
           }
 
-          // Anotar si la posición pertenece a teoría de aperturas pero NO descartar las jugadas elegidas por el usuario
-          const historySoFar = tempChess.history();
-          const theory = lookupTheory(historySoFar);
-          if (theory.isBook && i < 8) {
+          const san = m.san || '';
+
+          // DESTILADOR DE JUGADAS DE LIBRO:
+          // Comprobar si el movimiento pertenece a la teoría de aperturas ECO conocida
+          const bookDistillation = distillBookMove(tempChess, san);
+          const isUserBookMove = bookDistillation.isBook;
+
+          if (isUserBookMove) {
             discardedBookCount++;
           }
 
           // Registrar ÚNICAMENTE jugadas manuales del usuario
           if (isUserTurn) {
-            const san = m.san || '';
+            if (!isUserBookMove) {
+              autonomousMovesCount++;
+            }
+
             const isCapture = san.includes('x');
             const isCheck = san.includes('+');
             const isProphylactic = ['h3', 'a3', 'h6', 'a6', 'Kh1', 'Kh8', 'g3', 'g6'].some((s) =>
@@ -170,29 +182,39 @@ export class HistoryAssistant {
             );
 
             let piece = 'P';
-            if (san.startsWith('N')) {
-              piece = 'N';
-              knightsCount++;
-            } else if (san.startsWith('B')) {
-              piece = 'B';
-              bishopsCount++;
-            } else if (san.startsWith('R')) {
-              piece = 'R';
-              rooksCount++;
-            } else if (san.startsWith('Q')) {
-              piece = 'Q';
-              queenMovesCount++;
-            } else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') {
-              piece = 'K';
+            // Solo las jugadas autónomas (fuera de libro) alimentan las preferencias de piezas
+            // para evitar que líneas teóricas estándar como 2.Nf3 o 3.Bb5 sesguen falsamente el perfil del jugador
+            if (!isUserBookMove) {
+              if (san.startsWith('N')) {
+                piece = 'N';
+                knightsCount++;
+              } else if (san.startsWith('B')) {
+                piece = 'B';
+                bishopsCount++;
+              } else if (san.startsWith('R')) {
+                piece = 'R';
+                rooksCount++;
+              } else if (san.startsWith('Q')) {
+                piece = 'Q';
+                queenMovesCount++;
+              } else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') {
+                piece = 'K';
+              }
+
+              if (san === 'O-O') kingsideCastleCount++;
+              if (san === 'O-O-O') queensideCastleCount++;
+
+              if (isCapture) captureMovesCount++;
+              if (isCheck) checkMovesCount++;
+              if (!isCapture && !isCheck) quietMovesCount++;
+              if (i >= 30) endgameMovesCount++;
+            } else {
+              if (san.startsWith('N')) piece = 'N';
+              else if (san.startsWith('B')) piece = 'B';
+              else if (san.startsWith('R')) piece = 'R';
+              else if (san.startsWith('Q')) piece = 'Q';
+              else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') piece = 'K';
             }
-
-            if (san === 'O-O') kingsideCastleCount++;
-            if (san === 'O-O-O') queensideCastleCount++;
-
-            if (isCapture) captureMovesCount++;
-            if (isCheck) checkMovesCount++;
-            if (!isCapture && !isCheck) quietMovesCount++;
-            if (i >= 30) endgameMovesCount++;
 
             const think = Math.max(1, Math.min(120, m.thinkTime || 12));
             totalThinkTime += think;
@@ -206,6 +228,8 @@ export class HistoryAssistant {
               thinkTimeSeconds: think,
               fenBefore: tempChess.fen(),
               isOpening: i < 14,
+              isBookMove: isUserBookMove,
+              bookOpeningName: isUserBookMove ? bookDistillation.openingName : undefined,
               isCapture,
               isCheck,
               isProphylactic,
@@ -243,12 +267,14 @@ export class HistoryAssistant {
 
       const totalUserMoves = userMoves.length;
       const avgThink = totalUserMoves > 0 ? Math.round(totalThinkTime / totalUserMoves) : 0;
+      // Estilo personal medido estrictamente sobre jugadas autónomas (fuera de libro)
+      const movesForStyle = autonomousMovesCount > 0 ? autonomousMovesCount : totalUserMoves;
       const aggression =
-        totalUserMoves > 0
-          ? Math.round(((captureMovesCount + checkMovesCount) / totalUserMoves) * 100)
+        movesForStyle > 0
+          ? Math.round(((captureMovesCount + checkMovesCount) / movesForStyle) * 100)
           : 0;
       const patience =
-        totalUserMoves > 0 ? Math.round((quietMovesCount / totalUserMoves) * 100) : 0;
+        movesForStyle > 0 ? Math.round((quietMovesCount / movesForStyle) * 100) : 0;
 
       let castlingPref: 'kingside' | 'queenside' | 'flexible' = 'flexible';
       if (kingsideCastleCount > queensideCastleCount * 2) castlingPref = 'kingside';
@@ -262,6 +288,7 @@ export class HistoryAssistant {
         userMoves,
         discardedIaMovesCount: discardedIaCount,
         discardedBookMovesCount: discardedBookCount,
+        distilledAutonomousMovesCount: autonomousMovesCount,
         topOpenings,
         averageThinkTime: avgThink,
         aggressionScore: Math.min(95, Math.max(0, aggression)),
@@ -296,6 +323,7 @@ export class HistoryAssistant {
       userMoves: [],
       discardedIaMovesCount: 0,
       discardedBookMovesCount: 0,
+      distilledAutonomousMovesCount: 0,
       topOpenings: [],
       averageThinkTime: 0,
       aggressionScore: 0,
@@ -324,9 +352,21 @@ export class StyleAssistant {
     distilled: DistilledUserData
   ): { score: number; explanation: string } {
     try {
-      if (!distilled || distilled.manualGamesCount < 10) {
-        return { score: 5.0, explanation: 'Calibración insuficiente (<10 partidas del jugador).' };
+      // Si no hay datos, puntuación posicional neutral con desarrollo activo
+      if (!distilled || distilled.manualGamesCount === 0) {
+        let base = 5.0;
+        const isCenterMove = ['e4', 'd4', 'Nf3', 'Nc3', 'e5', 'd5', 'Nf6', 'Nc6', 'c4', 'c5'].some(
+          (target) => to === target || moveSan.includes(target)
+        );
+        if (isCenterMove) base += 1.0;
+        return {
+          score: base,
+          explanation: `Iniciando calibración de estilo (Juega tu primera partida para destilar tu ADN ajedrecístico).`,
+        };
       }
+
+      // Factor de madurez de calibración progresivo (de 0.1 a 1.0 según partidas jugadas, consolidado al llegar a 10)
+      const maturityRatio = Math.min(1.0, Math.max(0.2, distilled.manualGamesCount / 10));
 
       let score = 5.5;
       const isCapture = moveSan.includes('x');

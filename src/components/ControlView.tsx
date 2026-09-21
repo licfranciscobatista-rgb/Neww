@@ -25,6 +25,7 @@ import { DirectorCommandConsole } from './control/DirectorCommandConsole';
 import { MetricsAndPerformanceCard } from './control/MetricsAndPerformanceCard';
 import { ControlJsonInspector } from './control/ControlJsonInspector';
 import { SubDirectorEngineAuditorCard } from './control/SubDirectorEngineAuditorCard';
+import { SubDirectorFpsStabilityBanner } from './control/SubDirectorFpsStabilityBanner';
 
 export const ControlView: React.FC = () => {
   const profile = loadPlayerProfile();
@@ -140,6 +141,13 @@ export const ControlView: React.FC = () => {
       <DirectorCommandConsole
         onNotify={(msg) => setLastCheckMessage(msg)}
         onRefreshTelemetry={() => setTelemetry(controlDirector.getTelemetry(profile.gamesPlayed || games.length))}
+      />
+
+      {/* Misión del Sub-Director: Estabilizador Activo de 60 FPS & Salud Integral de Motores */}
+      <SubDirectorFpsStabilityBanner
+        telemetry={telemetry}
+        onVerifyEngines={handleVerifyEngines}
+        isVerifying={isVerifyingEngines}
       />
 
       {/* Grid: El Director vs El Sub-Director (Roles y Límites Claros) */}

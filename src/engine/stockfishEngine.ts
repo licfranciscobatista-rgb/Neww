@@ -1,6 +1,6 @@
 import { Chess, Square } from 'chess.js';
 import { EngineRecommendation } from '../types/chess';
-import { getReliableTheoryMoves } from './theoryBook';
+import { getReliableTheoryMoves, lookupTheory } from './theoryBook';
 
 export interface ScoredMove {
   move: string;
@@ -273,6 +273,7 @@ export function runStockfishRecommendation(chess: Chess): EngineRecommendation |
     if (bookCandidate) {
       const isWhite = chess.turn() === 'w';
       const evalDisplay = isWhite ? '+0.35' : '-0.20';
+      const projectedTheory = lookupTheory([...history, bookCandidate.san]);
       return {
         engine: 'stockfish',
         engineName: 'Stockfish 19',
@@ -283,11 +284,13 @@ export function runStockfishRecommendation(chess: Chess): EngineRecommendation |
         evaluation: isWhite ? 35 : -20,
         evalDisplay: `${evalDisplay} peones`,
         confidence: 99,
-        explanation: `Línea magistral de teoría de aperturas (${bookCandidate.san}). Control óptimo del centro y desarrollo coordinado.`,
+        explanation: `📖 Jugada de Libro (${projectedTheory.openingName} - ECO ${projectedTheory.eco}): línea magistral estándar que cualquier motor o maestro juega por teoría.`,
         color: '#38bdf8',
         timeTakenMs: Math.max(1, Math.round(performance.now() - startTime)),
         timestamp: Date.now(),
         isMasterMove: true,
+        isBookMove: true,
+        bookOpeningName: projectedTheory.openingName,
       };
     }
   }

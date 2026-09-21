@@ -19,12 +19,28 @@ export interface EngineRecommendation {
   evalDisplay?: string;
   depth?: number;
   isMasterMove?: boolean;
+  isBookMove?: boolean;
+  bookOpeningName?: string;
+  avoidPieceName?: string;
+  avoidPieceSymbol?: string;
+  simpleMoveText?: string;
+  badIdeaSummary?: string;
+  badIdeaDetail?: string;
+  suggestedPieceName?: string;
+  suggestedPieceSymbol?: string;
+  suggestedSan?: string;
   confidence?: number;
   explanation?: string;
   color?: string;
   humanProbability?: number;
   timeTakenMs?: number;
   timestamp?: number;
+  assistantVotes?: Array<{
+    id: string;
+    name: string;
+    contribution: string;
+    scoreEffect: string;
+  }>;
 }
 
 export interface CandidateArrow {

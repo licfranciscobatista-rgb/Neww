@@ -10,8 +10,6 @@ import {
   ArrowRight,
   Play,
   Lock,
-  Layers,
-  ShieldCheck,
 } from 'lucide-react';
 import { EngineRecommendation, EngineType } from '../types/chess';
 import { getDirectMoveInstruction } from '../utils/moveInstruction';
@@ -142,8 +140,29 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
+        {/* Destilador de Libro: Claridad total sobre si la jugada proviene de teoría estándar o de cálculo de motor */}
+        {rec.isBookMove ? (
+          <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-[10px]">
+            <span className="text-amber-300 font-bold flex items-center gap-1.5">
+              <span>📖</span>
+              <span>Jugada de Libro ECO</span>
+            </span>
+            <span className="text-amber-400 font-mono text-[9px] truncate max-w-[150px] font-medium">
+              {rec.bookOpeningName || 'Teoría de Apertura'}
+            </span>
+          </div>
+        ) : (
+          <div className="bg-slate-900/60 border border-slate-800 rounded-lg px-2.5 py-1 flex items-center justify-between text-[10px] text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Cálculo Autónomo de Motor</span>
+            </span>
+            <span className="font-mono text-[9px] text-slate-500">Fuera de libro</span>
+          </div>
+        )}
+
         <p className="text-[11px] text-slate-300 leading-snug px-0.5">
-          {instr.tacticalIntent}
+          {rec.explanation || instr.tacticalIntent}
         </p>
 
         {onApplyRecommendationMove && (
@@ -229,8 +248,12 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-200">GarboChess</h4>
-                  <p className="text-[10px] text-emerald-400 font-medium">Recomendación Teórica Posicional</p>
+                  <h4 className="text-xs font-bold text-slate-200">
+                    {garboRec?.isBookMove ? 'Libro ECO / Garbo' : 'GarboChess'}
+                  </h4>
+                  <p className="text-[10px] text-emerald-400 font-medium">
+                    {garboRec?.isBookMove ? 'Estándar Teórico de Libro' : 'Recomendación Posicional Clásica'}
+                  </p>
                 </div>
               </div>
 
@@ -244,9 +267,13 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 >
                   {garboRemainingUses}/5 usos
                 </span>
-                <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 flex items-center gap-1 font-medium">
-                  <EyeOff className="w-3 h-3 text-slate-500" />
-                  <span>Teórica</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 font-medium ${
+                  garboRec?.isBookMove
+                    ? 'bg-amber-950/40 text-amber-300 border-amber-600/40'
+                    : 'text-slate-400 bg-slate-950 border-slate-800'
+                }`}>
+                  {garboRec?.isBookMove ? <span>📖</span> : <EyeOff className="w-3 h-3 text-slate-500" />}
+                  <span>{garboRec?.isBookMove ? 'Libro ECO' : 'Posicional'}</span>
                 </span>
               </div>
             </div>
@@ -334,101 +361,93 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         </div>
 
         {/* Motor Personal (Identidad Propia del Jugador) */}
-        <div
-          className={`rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all border ${
-            personalEngineUnlocked
-              ? 'bg-slate-900/90 border-amber-500/40 hover:border-amber-500/70'
-              : 'bg-slate-900/90 border-amber-900/40'
-          }`}
-        >
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
-                    personalEngineUnlocked
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                      : 'bg-amber-950/30 border-amber-800/40 text-amber-500'
-                  }`}
-                >
-                  {personalEngineUnlocked ? (
-                    <UserCheck className="w-4 h-4" />
-                  ) : (
-                    <Lock className="w-4 h-4 text-amber-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Motor Personal</h4>
-                  <p className="text-[10px] text-amber-400 font-medium">Modelo Jugador (8 Ayudantes)</p>
-                </div>
-              </div>
+        {(() => {
+          const cleanProgress = personalProgress.replace(/\s*partidas\s*$/i, '').trim();
+          return (
+            <div
+              className={`bg-slate-900/90 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all border ${
+                personalEngineUnlocked
+                  ? 'border-amber-500/40 hover:border-amber-500/70'
+                  : 'border-amber-500/30'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
+                        personalEngineUnlocked
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                          : 'bg-amber-950/30 border-amber-800/40 text-amber-500'
+                      }`}
+                    >
+                      {personalEngineUnlocked ? (
+                        <UserCheck className="w-4 h-4" />
+                      ) : (
+                        <Lock className="w-4 h-4 text-amber-400" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-200">Motor Personal</h4>
+                      <p className="text-[10px] text-amber-400 font-medium">Modelo Jugador Propio</p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    personalEngineUnlocked
-                      ? 'bg-amber-950/60 text-amber-300 border-amber-600/40'
-                      : 'bg-amber-950/60 text-amber-400 border-amber-800/50'
-                  }`}
-                >
-                  {personalProgress} partidas
-                </span>
-                {personalEngineUnlocked && (
-                  <button
-                    onClick={() => onToggleArrow('personal')}
-                    className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
-                      arrowFilter.personal ? 'text-amber-400' : 'opacity-40'
-                    }`}
-                    title="Activar/desactivar flecha personal"
-                  >
-                    {arrowFilter.personal ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        personalEngineUnlocked
+                          ? 'bg-amber-950/60 text-amber-300 border-amber-600/40'
+                          : 'bg-amber-950/60 text-amber-400 border-amber-800/50'
+                      }`}
+                    >
+                      {cleanProgress} partidas
+                    </span>
+                    <button
+                      onClick={() => onToggleArrow('personal')}
+                      className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
+                        arrowFilter.personal ? 'text-amber-400' : 'opacity-40'
+                      }`}
+                      title="Activar/desactivar flecha personal"
+                    >
+                      {arrowFilter.personal ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {personalEngineUnlocked ? (
+                  renderMoveBox(
+                    personalRec,
+                    loadingStates.personal,
+                    'Evaluando con tu ADN personal...',
+                    'personal'
+                  )
+                ) : (
+                  <div className="text-center py-4 space-y-1.5 my-1 bg-slate-950/40 rounded-xl border border-dashed border-amber-900/40">
+                    <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-xs">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>En Calibración ({cleanProgress} partidas)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Requiere 10 partidas para sugerir en el tablero
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
 
-            {!personalEngineUnlocked ? (
-              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2 my-1">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400 text-[11px]">Calibración de perfil</span>
-                  <span className="font-mono text-amber-400 font-bold text-xs">{personalProgress}</span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                  <div
-                    className="bg-amber-500 h-full transition-all duration-500 rounded-full"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (parseInt(personalProgress.split('/')[0] || '0', 10) / 10) * 100
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 text-center pt-0.5">
-                  Desbloqueo automático al completar 10 partidas manuales
-                </p>
+              <div className="pt-2 mt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                <span className="truncate">
+                  {personalEngineUnlocked
+                    ? `Estilo: ${personalRec?.evalDisplay || 'Propio'}`
+                    : 'Calibración en segundo plano'}
+                </span>
+                <span className="font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40 shrink-0">
+                  {personalEngineUnlocked ? 'Soberano (100%)' : `${cleanProgress} partidas`}
+                </span>
               </div>
-            ) : (
-              renderMoveBox(
-                personalRec,
-                loadingStates.personal,
-                'Ayudante de Estilo evaluando...',
-                'personal'
-              )
-            )}
-          </div>
-
-          <div className="pt-2 mt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
-            <span className="truncate max-w-[200px]">
-              {personalEngineUnlocked
-                ? personalRec?.evalDisplay || 'Esperando posición'
-                : 'Flecha inactiva (requiere 10 partidas)'}
-            </span>
-            <span className="font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40 shrink-0">
-              {personalEngineUnlocked ? 'Afinidad Estilo' : `${personalProgress} jugadas`}
-            </span>
-          </div>
-        </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

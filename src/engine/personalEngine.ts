@@ -20,7 +20,9 @@ import {
   EndgameTransitionAssistant,
   DistilledUserData,
 } from './personalAssistants';
+import { runSubEngineAudit, PersonalAuditReport } from './personalSubEngines';
 import { loadGameRecords } from '../storage/chessStorage';
+import { compilePersonalEngineDNA, PersonalEngineDNAFile } from './personalDNAFile';
 
 export interface CreateDecisionEventParams {
   gameId: string;
@@ -175,26 +177,37 @@ export interface PersonalEngineStatus {
   assistantsCount: number;
   statusMessage: string;
   distilledData: DistilledUserData;
+  subEngineReport?: PersonalAuditReport;
+  compiledDNA?: PersonalEngineDNAFile;
 }
 
 export function getPersonalEngineStatus(
   profile: PlayerProfile,
-  games?: GameRecord[]
+  games?: GameRecord[],
+  currentChess?: Chess
 ): PersonalEngineStatus {
   try {
     const storedGames = games || loadGameRecords();
     const distilled = HistoryAssistant.analyzeAndDistill(storedGames);
+    const compiledDNA = compilePersonalEngineDNA(profile, storedGames, distilled);
 
     const effectiveGames = Math.max(profile.gamesPlayed, distilled.manualGamesCount);
     const requiredGames = 10;
     const isUnlocked = effectiveGames >= requiredGames;
     const progressPercent = Math.min(100, Math.round((effectiveGames / requiredGames) * 100));
 
+    let subEngineReport: PersonalAuditReport | undefined;
+    if (currentChess) {
+      subEngineReport = runSubEngineAudit(currentChess, distilled, storedGames);
+    }
+
     let statusMessage = '';
     if (isUnlocked) {
-      statusMessage = `Motor Desbloqueado: Calibrado con ${effectiveGames} partidas (${(distilled.distilledBytes / 1024).toFixed(1)} KB destilados de ${Math.round(distilled.rawPgnBytes / 1024)} KB brutos).`;
+      statusMessage = `Motor Personal Calibrado al 100%: ADN propio consolidado con ${effectiveGames} partidas (${(distilled.distilledBytes / 1024).toFixed(1)} KB destilados de ${Math.round(distilled.rawPgnBytes / 1024)} KB brutos).`;
+    } else if (effectiveGames > 0) {
+      statusMessage = `Sub-Motores en Calibración Activa (${effectiveGames}/${requiredGames} partidas): Mapeando árbol posicional y afinidad (${progressPercent}% completado). Requiere 10 partidas para sugerir en tablero.`;
     } else {
-      statusMessage = `Bloqueado: Requiere al menos ${requiredGames} partidas jugadas por ti para calibrar tu ADN de juego (Llevas ${effectiveGames}/${requiredGames}). Faltan ${requiredGames - effectiveGames} partidas.`;
+      statusMessage = `Motor Personal Bloqueado (0/${requiredGames}): Requiere 10 partidas jugadas por ti para calibrar tu árbol de decisiones y biotipo propio.`;
     }
 
     return {
@@ -207,6 +220,8 @@ export function getPersonalEngineStatus(
       assistantsCount: 8,
       statusMessage,
       distilledData: distilled,
+      subEngineReport,
+      compiledDNA,
     };
   } catch {
     return {
@@ -239,112 +254,95 @@ export interface PersonalRecommendationParams {
 export function runPersonalRecommendation(
   params: PersonalRecommendationParams
 ): EngineRecommendation | null {
-  const { chess, profile, games } = params;
+  const { chess, profile, games, timeRemainingSeconds = null } = params as any;
 
   if (!chess) return null;
 
   try {
-    const status = getPersonalEngineStatus(profile, games);
+    const storedGames = games || loadGameRecords();
+    const status = getPersonalEngineStatus(profile, storedGames, chess);
+
+    // REGLA ESTRICTA Y HONESTA: Si no hay al menos 10 partidas, el motor NO proyecta jugadas inventadas
     if (!status.isUnlocked) {
-      return null; // Motor inactivo: no procesa ni gasta recursos sin partidas
+      return null;
     }
 
     const legalMoves = chess.moves({ verbose: true });
     if (!legalMoves || legalMoves.length === 0) return null;
 
     const distilled = status.distilledData;
-    const historyPlies = chess.history().length;
 
-    // 1. Pre-cálculo de conjuntos para evitar bucles O(N*M) en el bucle principal
-    const knownOpeningMoves = new Set(
-      distilled.userMoves.filter((um) => um.ply < 16).map((um) => um.san)
-    );
+    // Ejecución de los 8 Sub-Motores autónomos
+    const auditReport = runSubEngineAudit(chess, distilled, storedGames, timeRemainingSeconds);
+    const verdicts = auditReport.subEngineVerdicts;
 
-    // Consulta y telemetría agregada de los ayudantes analíticos
-    const tacticsAggression = TacticsAggressionAssistant.calculateSummary(distilled);
-    const prophylaxis = ProphylaxisPatienceAssistant.calculateSummary(distilled);
-    const endgame = EndgameTransitionAssistant.calculateSummary(distilled);
-    const timePace = TimePaceAssistant.calculateSummary(distilled);
+    // 1. Filtro de vetos del Sub-Motor 4 (Blunder Shield)
+    const vetoedSan = new Set(verdicts.blunder_shield.vetoMoves.map((v) => v.san));
 
-    // Evaluar cada jugada legal combinando la ponderación de los 8 ayudantes
     let bestMove = legalMoves[0];
-    let highestScore = -1;
-    let bestExplanation = '';
+    let highestCompositeScore = -999;
+    let selectedRationale = '';
+
+    const graphFavored = verdicts.graph.favoredMoves;
 
     for (const m of legalMoves) {
-      // 1. Ayudante de Estilo: Puntuación base de 1.0 a 10.0
-      const styleResult = StyleAssistant.scoreMove(chess, m.san, m.from, m.to, distilled);
-      let moveScore = styleResult.score;
-      const extraNotes: string[] = [];
-
-      // 2. Ayudante de Aperturas & Repertorio: En fase inicial (ply < 16), bonificar jugadas del repertorio del usuario
-      if (historyPlies < 16 && knownOpeningMoves.has(m.san)) {
-        moveScore += 1.4;
-        extraNotes.push('Apertura habitual');
+      // Si la jugada está vetada por riesgo táctico de colgada, descartar
+      if (vetoedSan.has(m.san) && legalMoves.length > 1) {
+        continue;
       }
 
-      // 3. Ayudante de Táctica & Agresividad: Bonificar si el usuario tiene afinidad de ataque y la jugada es activa
-      if (m.san.includes('x') || m.san.includes('+')) {
-        if (tacticsAggression.score > 50) {
-          moveScore += 0.8;
-          extraNotes.push('Afinidad táctica');
-        }
+      let compositeScore = 50;
+      let moveRationale = '';
+
+      // Aporte Sub-Motor 1 (Grafo Posicional): Si el usuario ya la jugó en esta misma posición
+      const inGraph = graphFavored.find((g) => g.san === m.san);
+      if (inGraph) {
+        compositeScore += inGraph.score * 0.4;
+        moveRationale = inGraph.rationale;
       }
 
-      // 4. Ayudante de Profilaxis & Paciencia: Bonificar jugadas preventivas si el perfil del jugador es paciente
-      if (
-        m.san === 'h3' ||
-        m.san === 'h6' ||
-        m.san === 'a3' ||
-        m.san === 'a6' ||
-        m.san === 'Kh1' ||
-        m.san === 'Kh8'
-      ) {
-        if (prophylaxis.score > 50) {
-          moveScore += 0.9;
-          extraNotes.push('Perfil profiláctico');
-        }
+      // Aporte Sub-Motor 2 (Estilo & Biotipo)
+      const inStyle = verdicts.style.favoredMoves.find((s) => s.san === m.san);
+      if (inStyle) {
+        compositeScore += inStyle.score * 0.25;
+        if (!moveRationale) moveRationale = inStyle.rationale;
       }
 
-      // 5. Ayudante de Transición a Finales: En finales (ply >= 30), evaluar técnica y activación de rey
-      if (historyPlies >= 30) {
-        if (m.piece === 'k') {
-          moveScore += 0.7;
-          extraNotes.push('Activación de Rey');
-        }
-        if (endgame.endgameMovesCount > 5 && m.san.includes('x')) {
-          moveScore += 0.6;
-          extraNotes.push('Simplificación favorable');
-        }
+      // Aporte Sub-Motor 3 (Repertorio)
+      const inRep = verdicts.repertoire.favoredMoves.find((r) => r.san === m.san);
+      if (inRep) {
+        compositeScore += inRep.score * 0.2;
+        if (!moveRationale) moveRationale = inRep.rationale;
       }
 
-      // 6. Ayudante de Errores Recurrentes: Penalizar fuertemente si cae en un patrón de error del usuario
-      const recurrentWarning = MistakeTrackerAssistant.checkRecurrentRisk(chess, m.san);
-      if (recurrentWarning) {
-        moveScore -= 3.0; // Penalización de protección
+      // Aporte Sub-Motor 6 (Táctica)
+      const inTactics = verdicts.tactics.favoredMoves.find((t) => t.san === m.san);
+      if (inTactics) {
+        compositeScore += inTactics.score * 0.15;
       }
 
-      if (moveScore > highestScore) {
-        highestScore = moveScore;
+      // Aporte Sub-Motor 5 (Profilaxis)
+      const inProphy = verdicts.prophylaxis.favoredMoves.find((p) => p.san === m.san);
+      if (inProphy) {
+        compositeScore += inProphy.score * 0.1;
+      }
+
+      if (compositeScore > highestCompositeScore) {
+        highestCompositeScore = compositeScore;
         bestMove = m;
-        bestExplanation = styleResult.explanation;
-        if (extraNotes.length > 0) {
-          bestExplanation += ` [${extraNotes.join(', ')}]`;
-        }
+        selectedRationale = moveRationale || 'Jugada de desarrollo armónico seleccionada por tus sub-motores.';
       }
     }
 
-    // 7. Alerta de errores recurrentes en la jugada final elegida (si aplica)
-    const finalRecurrentWarning = MistakeTrackerAssistant.checkRecurrentRisk(chess, bestMove.san);
-    if (finalRecurrentWarning) {
-      bestExplanation += ` (${finalRecurrentWarning})`;
-    }
+    // Auditoría transparente de los 8 sub-motores para visualización
+    const assistantVotes = Object.values(verdicts).map((v) => ({
+      id: v.id,
+      name: v.name,
+      contribution: v.statusSummary,
+      scoreEffect: `${v.score}/100`,
+    }));
 
-    // 8. Ayudante de Ritmo y Tiempo: Sugerencia de tiempo óptimo de cálculo
-    const thinkTimeNote =
-      timePace.averageSeconds > 0
-        ? ` • Tiempo habitual: ${timePace.averageSeconds.toFixed(1)}s`
-        : '';
+    const styleProfile = StyleAssistant.getStyleProfile(distilled);
 
     return {
       engine: 'personal',
@@ -353,37 +351,17 @@ export function runPersonalRecommendation(
       from: bestMove.from,
       to: bestMove.to,
       san: bestMove.san,
-      evaluation: Math.round(Math.min(100, Math.max(10, highestScore * 10))),
-      evalDisplay: `Estilo: ${Math.min(10, Math.max(1, highestScore)).toFixed(1)}/10`,
-      confidence: Math.round(Math.min(100, highestScore * 10)),
-      explanation: `${bestExplanation}${thinkTimeNote}`,
+      evaluation: Math.round(Math.min(100, Math.max(10, highestCompositeScore))),
+      evalDisplay: `ADN Propio • ${styleProfile.archetype} (${storedGames.length} partidas)`,
+      confidence: Math.round(Math.min(100, highestCompositeScore)),
+      explanation: selectedRationale,
       color: '#fbbf24',
       timeTakenMs: 8,
       timestamp: Date.now(),
+      assistantVotes,
     };
   } catch (err) {
     console.warn('[PersonalEngine] Recuperación segura automática (Zero-Crash):', err);
-    try {
-      const legalMoves = chess.moves({ verbose: true });
-      if (!legalMoves || legalMoves.length === 0) return null;
-      const fallback = legalMoves[0];
-      return {
-        engine: 'personal',
-        engineName: 'Motor Personal',
-        move: `${fallback.from}${fallback.to}`,
-        from: fallback.from,
-        to: fallback.to,
-        san: fallback.san,
-        evaluation: 60,
-        evalDisplay: 'Estilo: 6.0/10',
-        confidence: 60,
-        explanation: 'Jugada posicional recomendada por el Motor Personal (Protección Activa).',
-        color: '#fbbf24',
-        timeTakenMs: 2,
-        timestamp: Date.now(),
-      };
-    } catch {
-      return null;
-    }
+    return null;
   }
 }

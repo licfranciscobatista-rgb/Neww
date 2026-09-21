@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { EngineRecommendation, EngineType } from '../types/chess';
 
 interface ActiveLinesBarProps {
@@ -143,6 +144,33 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
               </button>
             );
           })}
+
+          {/* Recomendación de mala jugada calculada por Chess.js */}
+          {recommendations.chessjs?.san && (
+            <button
+              type="button"
+              onClick={() => onToggleEngineFilter('chessjs')}
+              title={`Chess.js: ${recommendations.chessjs.simpleMoveText || `${recommendations.chessjs.avoidPieceName || 'Pieza'} a ${recommendations.chessjs.to || recommendations.chessjs.san}`}. Toca para proyectar en el tablero.`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all ${
+                activeArrowFilter.chessjs
+                  ? 'bg-rose-950/80 border-rose-500 text-rose-200 shadow-sm ring-1 ring-rose-500/40'
+                  : 'bg-rose-950/30 border-rose-900/60 text-rose-300 hover:border-rose-700/70 hover:text-white'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span className="text-[11px] font-semibold text-rose-200 flex items-center gap-1">
+                {recommendations.chessjs.avoidPieceSymbol && (
+                  <span className="text-rose-400 text-xs leading-none">
+                    {recommendations.chessjs.avoidPieceSymbol}
+                  </span>
+                )}
+                <span>
+                  {recommendations.chessjs.simpleMoveText ||
+                    `${recommendations.chessjs.avoidPieceName || 'Pieza'} a ${recommendations.chessjs.to || recommendations.chessjs.san}`}
+                </span>
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>

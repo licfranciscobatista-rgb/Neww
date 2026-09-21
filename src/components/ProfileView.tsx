@@ -17,10 +17,16 @@ import {
   Activity,
   CheckCircle2,
   Lock,
+  Download,
+  FileCode,
+  ChevronDown,
+  ChevronUp,
+  Cpu,
 } from 'lucide-react';
 import { PlayerProfile } from '../types/chess';
 import { savePlayerProfile, resetPlayerProfile, loadGameRecords } from '../storage/chessStorage';
 import { computeAssistantsDashboard } from '../engine/personalAssistants';
+import { compilePersonalEngineDNA, PersonalEngineDNAFile } from '../engine/personalDNAFile';
 
 interface ProfileViewProps {
   profile: PlayerProfile;
@@ -30,10 +36,30 @@ interface ProfileViewProps {
 export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfile }) => {
   const [name, setName] = useState(profile.username);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [showJsonInspector, setShowJsonInspector] = useState(false);
 
   // Load user's actual game records and compute the 8 assistants' real telemetry
   const games = useMemo(() => loadGameRecords(), [profile.gamesPlayed]);
   const dashboard = useMemo(() => computeAssistantsDashboard(games), [games]);
+
+  // Compilar el Archivo Final de ADN que alimenta al Motor Personal Soberano
+  const compiledDNA = useMemo<PersonalEngineDNAFile>(
+    () => compilePersonalEngineDNA(profile, games, dashboard.distilled),
+    [profile, games, dashboard.distilled]
+  );
+
+  const handleDownloadDNA = () => {
+    const jsonString = JSON.stringify(compiledDNA, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `personal-engine-dna-${profile.username || 'jugador'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Valores automáticos extraídos por los ayudantes a partir de las partidas reales del jugador
   const autoAggressiveness = dashboard.history.manualGames > 0
@@ -171,6 +197,102 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* SECCIÓN CRÍTICA: EL ARCHIVO FINAL QUE ALIMENTA AL MOTOR PERSONAL          */}
+      {/* ========================================================================= */}
+      <div className="p-4 sm:p-5 bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-900 border-2 border-amber-500/50 rounded-2xl space-y-4 shadow-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/20">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950 flex items-center gap-1 shadow-sm">
+                <FileCode className="w-3 h-3" />
+                Archivo Final de ADN
+              </span>
+              <span className="font-mono text-xs font-bold text-amber-300">
+                personal-engine-dna.json
+              </span>
+              <span className="text-[10px] font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-400">
+                {compiledDNA.checksum}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              Este es el artefacto compilado por los <strong>8 Sub-Motores</strong>. El <strong>Motor Personal Soberano</strong> es un módulo independiente que consume este archivo como su único combustible de cálculo.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleDownloadDNA}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition-all"
+              title="Descargar archivo personal-engine-dna.json para auditarlo externamente"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Descargar .JSON</span>
+            </button>
+            <button
+              onClick={() => setShowJsonInspector(!showJsonInspector)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs flex items-center gap-1.5 transition-all"
+            >
+              <Cpu className="w-3.5 h-3.5 text-amber-400" />
+              <span>{showJsonInspector ? 'Ocultar JSON' : 'Inspeccionar RAW'}</span>
+              {showJsonInspector ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Diagrama del Flujo Arquitectónico */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-[11px]">
+          <div className="space-y-1 p-2 bg-slate-900/60 rounded border border-slate-800">
+            <span className="font-bold text-sky-400 block flex items-center gap-1.5">
+              <span>1. Refinería de 8 Sub-Motores</span>
+            </span>
+            <p className="text-slate-400 text-[10px] leading-snug">
+              Analizan tus partidas, eliminan ruido PGN, indexan el grafo de posiciones y catalogan sesgos.
+            </p>
+            <span className="text-[9px] font-mono text-emerald-400 block pt-1">
+              • Estado: {games.length} partidas procesadas
+            </span>
+          </div>
+
+          <div className="space-y-1 p-2 bg-slate-900/60 rounded border border-amber-800/40">
+            <span className="font-bold text-amber-400 block flex items-center gap-1.5">
+              <span>2. Compilación del Archivo Final</span>
+            </span>
+            <p className="text-slate-400 text-[10px] leading-snug">
+              Se empaqueta el ADN en <code className="text-amber-300">personal-engine-dna.json</code> con {compiledDNA.subEnginesCompilation.subEngine1_PositionGraph.totalNodesMapped} nodos posicionales.
+            </p>
+            <span className="text-[9px] font-mono text-amber-300 block pt-1">
+              • Tamaño: {dashboard.history.distilledBytes} B ({compiledDNA.source.compressionEfficiency})
+            </span>
+          </div>
+
+          <div className="space-y-1 p-2 bg-slate-900/60 rounded border border-slate-800">
+            <span className="font-bold text-emerald-400 block flex items-center gap-1.5">
+              <span>3. Motor Personal Independiente</span>
+            </span>
+            <p className="text-slate-400 text-[10px] leading-snug">
+              Carga este archivo en memoria y emite jugadas soberanas sin intervención externa.
+            </p>
+            <span className="text-[9px] font-mono text-slate-300 block pt-1">
+              • Modo: {compiledDNA.engineReadiness.operationalMode} ({compiledDNA.engineReadiness.calibrationProgress})
+            </span>
+          </div>
+        </div>
+
+        {/* Inspector RAW expandible */}
+        {showJsonInspector && (
+          <div className="p-3 bg-slate-950 rounded-xl border border-amber-900/60 space-y-2 animate-in fade-in">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span className="text-amber-400 font-bold">Contenido en memoria entregado al Motor Personal:</span>
+              <span>{new Date(compiledDNA.compilationTimestamp).toLocaleTimeString()}</span>
+            </div>
+            <pre className="p-3 bg-slate-900/90 text-emerald-300 font-mono text-[10px] rounded-lg overflow-x-auto max-h-64 border border-slate-800 leading-relaxed">
+              {JSON.stringify(compiledDNA, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
+
       {/* Basic Profile Name Field */}
       <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
         <label className="text-xs font-bold text-slate-300 block">
@@ -226,12 +348,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
               {dashboard.history.isCalibrated ? (
                 <>
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  <span>Motor Personal Desbloqueado</span>
+                  <span>Motor Personal Calibrado al 100% ({dashboard.history.manualGames} partidas)</span>
+                </>
+              ) : dashboard.history.manualGames > 0 ? (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                  <span>Motor Personal Activo (Calibrando: {dashboard.history.manualGames}/10)</span>
                 </>
               ) : (
                 <>
                   <Lock className="w-3 h-3 text-amber-400" />
-                  <span>Bloqueado ({dashboard.history.manualGames}/10 partidas)</span>
+                  <span>Motor en Aprendizaje Inicial (0/10)</span>
                 </>
               )}
             </span>

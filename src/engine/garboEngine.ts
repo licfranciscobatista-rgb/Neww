@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 import { EngineRecommendation } from '../types/chess';
 import { evaluateMovesStockfish, ScoredMove } from './stockfishEngine';
+import { distillBookMove } from './theoryBook';
 
 /**
  * GarboChess classical positional evaluator.
@@ -64,21 +65,33 @@ export function runGarboRecommendation(
   const evalInPawns = (choice.score / 100).toFixed(2);
   const evalDisplay = choice.score >= 0 ? `+${evalInPawns}` : evalInPawns;
 
-  const isSharedWithStockfish = choice.move === top.move;
-  const explanation = isSharedWithStockfish
-    ? `Línea clásica posicional (coincide con Stockfish en el óptimo táctico: ${evalDisplay}).`
-    : `Alternativa posicional GarboChess: desarrollo armónico y control estructural (${evalDisplay}).`;
+  // DESTILADOR DE JUGADAS DE LIBRO:
+  // Detecta con honestidad si la jugada pertenece a la teoría de aperturas ECO conocida.
+  // Si es de libro, se etiqueta como Jugada de Libro y no como cálculo propio de Garbo.
+  const bookDistillation = distillBookMove(chess, choice.san);
+
+  let explanation: string;
+  if (bookDistillation.isBook) {
+    explanation = `📖 Jugada de Libro (${bookDistillation.openingName} - ECO ${bookDistillation.eco}): estándar teórico universal de apertura que cualquier jugador o motor realiza por memoria de aperturas.`;
+  } else {
+    const isSharedWithStockfish = choice.move === top.move;
+    explanation = isSharedWithStockfish
+      ? `Línea clásica posicional (coincide con Stockfish en el óptimo táctico: ${evalDisplay}).`
+      : `Alternativa posicional GarboChess: desarrollo armónico y control estructural (${evalDisplay}).`;
+  }
 
   return {
     engine: 'garbo',
-    engineName: 'GarboChess',
+    engineName: bookDistillation.isBook ? 'Libro ECO / Garbo' : 'GarboChess',
     move: choice.move,
     from: choice.from,
     to: choice.to,
     san: choice.san,
     evaluation: choice.score,
     evalDisplay: `${evalDisplay} peones`,
-    confidence: 88,
+    confidence: bookDistillation.isBook ? 99 : 88,
+    isBookMove: bookDistillation.isBook,
+    bookOpeningName: bookDistillation.isBook ? bookDistillation.openingName : undefined,
     explanation,
     color: '#059669', // Emerald Green
     timeTakenMs: 18,

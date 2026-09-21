@@ -132,3 +132,65 @@ export function getReliableTheoryMoves(chess: Chess): string[] {
   if (history.length !== expectedPlies) return [];
   return getNextTheoryMoves(history);
 }
+
+export interface BookDistillationResult {
+  isBook: boolean;
+  openingName: string;
+  eco: string;
+  explanation: string;
+}
+
+/**
+ * DESTILADOR DE JUGADAS DE LIBRO:
+ * Analiza un movimiento y determina si corresponde a una jugada de libro estándar (ECO)
+ * o si es un cálculo posicional autónomo fuera de libro.
+ * Permite separar con honestidad las jugadas estándar de teoría (que cualquiera haría)
+ * de los cálculos propios de GarboChess, Stockfish o el biotipo del jugador.
+ */
+export function distillBookMove(chess: Chess, sanMove: string): BookDistillationResult {
+  if (!chess || !sanMove) {
+    return {
+      isBook: false,
+      openingName: 'Fuera de Libro',
+      eco: 'A00',
+      explanation: 'Cálculo autónomo: posición sin registro teórico.',
+    };
+  }
+
+  const reliableContinuations = getReliableTheoryMoves(chess);
+  const isCandidateBook = reliableContinuations.includes(sanMove);
+
+  if (isCandidateBook) {
+    const projectedHistory = [...chess.history(), sanMove];
+    const theory = lookupTheory(projectedHistory);
+    return {
+      isBook: true,
+      openingName: theory.openingName,
+      eco: theory.eco,
+      explanation: `📖 Jugada de Libro (${theory.openingName} - ECO ${theory.eco}): estándar teórico universal que cualquier motor o jugador ejecuta por conocimiento de aperturas.`,
+    };
+  }
+
+  // Comprobar si el historial proyectado coincide con el prefijo de alguna apertura del libro
+  const currentHistory = chess.history();
+  if (currentHistory.length < 16) {
+    const projectedHistory = [...currentHistory, sanMove];
+    const theory = lookupTheory(projectedHistory);
+    if (theory.isBook) {
+      return {
+        isBook: true,
+        openingName: theory.openingName,
+        eco: theory.eco,
+        explanation: `📖 Jugada de Libro (${theory.openingName} - ECO ${theory.eco}): desarrollo de apertura clásico conocido universalmente.`,
+      };
+    }
+  }
+
+  return {
+    isBook: false,
+    openingName: 'Fuera de Libro',
+    eco: 'A00',
+    explanation: 'Cálculo posicional autónomo: variante fuera del libro de aperturas.',
+  };
+}
+

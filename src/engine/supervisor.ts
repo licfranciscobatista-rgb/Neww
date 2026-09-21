@@ -14,8 +14,10 @@ import { realMaia, RealMaiaAnalysis } from './realMaia';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
+import { runChessJsRecommendation } from './chessjsEngine';
 import { controlDirector, subDirector } from './controlDirector';
 import { loadGameRecords } from '../storage/chessStorage';
+import { distillBookMove } from './theoryBook';
 
 export interface SupervisorState {
   gameId: string;
@@ -37,10 +39,15 @@ export interface SupervisorState {
 }
 
 /** Convierte el análisis del GarboChess real en una recomendación para la interfaz. */
-function garboRecommendationFromReal(real: RealGarboAnalysis, explanationPrefix = 'GarboChess'): EngineRecommendation {
+function garboRecommendationFromReal(
+  real: RealGarboAnalysis,
+  chess?: Chess,
+  explanationPrefix = 'GarboChess'
+): EngineRecommendation {
+  const book = chess ? distillBookMove(chess, real.san) : { isBook: false, openingName: '', explanation: '' };
   return {
     engine: 'garbo',
-    engineName: 'GarboChess (JS real)',
+    engineName: book.isBook ? 'Libro ECO / Garbo' : 'GarboChess (JS real)',
     move: real.uci,
     san: real.san,
     from: real.from,
@@ -48,7 +55,11 @@ function garboRecommendationFromReal(real: RealGarboAnalysis, explanationPrefix 
     evaluation: real.scoreCp / 100,
     evalDisplay: real.evalDisplay,
     depth: real.depth,
-    explanation: `${explanationPrefix} (prof. ${real.depth}): ${real.san}. ${real.pv ? 'Línea: ' + real.pv.slice(0, 30) : ''}`,
+    isBookMove: book.isBook,
+    bookOpeningName: book.isBook ? book.openingName : undefined,
+    explanation: book.isBook
+      ? book.explanation
+      : `${explanationPrefix} (prof. ${real.depth}): ${real.san}. ${real.pv ? 'Línea: ' + real.pv.slice(0, 30) : ''}`,
     color: '#059669',
   };
 }
@@ -303,107 +314,7 @@ export class ChessSupervisor {
     // Check personal engine status (Desbloqueado desde partida 0)
     const personalStatus = getPersonalEngineStatus(profile, storedGames);
 
-    // 1. Run Stockfish (Recomendación principal con flechas)
-    const sfStart = performance.now();
-    const stockfishRec = runStockfishRecommendation(chess);
-    controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
-
-    // 2. GarboChess: Recomendación Teórica Posicional
-    const garboStart = performance.now();
-    const garboRec = runGarboRecommendation(chess);
-    controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
-
-    // 3. Maia: Recomendación Teórica Humana
-    const maiaStart = performance.now();
-    const maiaRec = runMaiaRecommendation(
-      chess,
-      profile.maiaEloCalibration || 1100
-    );
-    controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
-
-    // 4. Motor Personal: Disponible y adaptándose activamente (Con flechas en el tablero)
-    let personalRec: EngineRecommendation | null = null;
-    if (personalStatus.isUnlocked) {
-      const pStart = performance.now();
-      try {
-        personalRec = runPersonalRecommendation({
-          chess,
-          profile,
-          games: storedGames,
-        });
-      } catch (pErr) {
-        console.warn('[Supervisor] Fallback seguro en Motor Personal:', pErr);
-        personalRec = null;
-      }
-      controlDirector.watchEngineExecution('personal', performance.now() - pStart);
-    }
-
-    // 5. Chess.js: Eliminada la recomendación según directiva para máxima fluidez en tablets de 3GB de RAM
-    const chessjsRec = null;
-
-    // Compute candidate arrows for active engines
-    const arrows: CandidateArrow[] = [];
-
-    if (!shouldSuppressArrows) {
-      if (stockfishRec && stockfishRec.move) {
-        arrows.push({
-          from: stockfishRec.from,
-          to: stockfishRec.to,
-          label: `SF • ${stockfishRec.evalDisplay}`,
-          san: stockfishRec.san,
-          color: '#2563eb',
-        });
-      }
-
-      if (maiaRec && maiaRec.move) {
-        arrows.push({
-          from: maiaRec.from,
-          to: maiaRec.to,
-          label: `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
-          san: maiaRec.san,
-          color: '#7c3aed',
-        });
-      }
-
-      if (personalRec && personalRec.move && personalStatus.isUnlocked) {
-        arrows.push({
-          from: personalRec.from,
-          to: personalRec.to,
-          label: `MP • ${personalRec.evalDisplay}`,
-          san: personalRec.san,
-          color: '#d97706',
-        });
-      }
-    }
-
-    // Compute Agreements
-    const moveEngineMap = new Map<string, { san: string; engines: EngineType[] }>();
-    const allRecs: Array<{ engine: EngineType; rec: EngineRecommendation | null }> = [
-      { engine: 'stockfish', rec: stockfishRec },
-      { engine: 'garbo', rec: garboRec },
-      { engine: 'maia', rec: maiaRec },
-      { engine: 'personal', rec: personalRec },
-    ];
-
-    for (const item of allRecs) {
-      if (item.rec && item.rec.move) {
-        const existing = moveEngineMap.get(item.rec.move);
-        if (existing) {
-          existing.engines.push(item.engine);
-        } else {
-          moveEngineMap.set(item.rec.move, { san: item.rec.san, engines: [item.engine] });
-        }
-      }
-    }
-
-    const agreements = Array.from(moveEngineMap.entries())
-      .filter(([_, data]) => data.engines.length > 1)
-      .map(([move, data]) => ({
-        move,
-        san: data.san,
-        engines: data.engines,
-      }));
-
+    // Emisión inmediata de estado base para que el tablero pinte a 60 FPS sin esperar a los motores
     this.state = {
       ...this.state,
       gameId,
@@ -411,30 +322,175 @@ export class ChessSupervisor {
       generation,
       fen,
       isGameOver: false,
-      stockfishRequestedThisTurn: false,
-      garboRequestedThisTurn: false,
       thinkingTime,
-      candidateArrows: arrows,
-      agreements,
       personalEngineUnlocked: personalStatus.isUnlocked,
       personalProgress: `${personalStatus.gamesPlayed} / 10 partidas`,
-      recommendations: {
-        stockfish: stockfishRec,
-        garbo: garboRec,
-        maia: maiaRec,
-        personal: personalRec,
-        chessjs: chessjsRec,
-      },
-      loadingStates: {
-        stockfish: false,
-        garbo: false,
-        maia: false,
-        personal: false,
-        chessjs: false,
-      },
     };
-
     this.onStateChange(this.state);
+
+    // Sub-Director programa la ejecución de los motores en micro-cuadro no bloqueante (Garantía 60 FPS)
+    subDirector.scheduleZeroLagFrame(() => {
+      if (this.state.generation !== generation || this.state.isGameOver) return;
+
+      // 1. Run Stockfish (Recomendación principal con flechas)
+      const sfStart = performance.now();
+      const stockfishRec = runStockfishRecommendation(chess);
+      controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
+
+      // 2. GarboChess: Recomendación Teórica Posicional
+      const garboStart = performance.now();
+      const garboRec = runGarboRecommendation(chess);
+      controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
+
+      // 3. Maia: Recomendación Teórica Humana
+      const maiaStart = performance.now();
+      const maiaRec = runMaiaRecommendation(
+        chess,
+        profile.maiaEloCalibration || 1100
+      );
+      controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
+
+      // 4. Motor Personal: Disponible y adaptándose activamente (Con flechas en el tablero)
+      let personalRec: EngineRecommendation | null = null;
+      if (personalStatus.isUnlocked) {
+        const pStart = performance.now();
+        try {
+          personalRec = runPersonalRecommendation({
+            chess,
+            profile,
+            games: storedGames,
+          });
+        } catch (pErr) {
+          console.warn('[Supervisor] Fallback seguro en Motor Personal:', pErr);
+          personalRec = null;
+        }
+        controlDirector.watchEngineExecution('personal', performance.now() - pStart);
+      }
+
+      // 5. Chess.js: Detección inteligente de jugada dudosa/pasiva para evitar
+      let chessjsRec: EngineRecommendation | null = null;
+      try {
+        const cjsStart = performance.now();
+        const otherMoves = [
+          stockfishRec?.move,
+          garboRec?.move,
+          maiaRec?.move,
+          personalRec?.move,
+        ].filter(Boolean) as string[];
+        chessjsRec = runChessJsRecommendation(new Chess(chess.fen()), otherMoves);
+        controlDirector.watchEngineExecution('chessjs', performance.now() - cjsStart);
+      } catch (err) {
+        console.warn('[Supervisor] Fallback seguro en Chess.js:', err);
+      }
+
+      // Compute candidate arrows for active engines
+      const arrows: CandidateArrow[] = [];
+
+      if (!shouldSuppressArrows) {
+        if (stockfishRec && stockfishRec.move) {
+          arrows.push({
+            from: stockfishRec.from,
+            to: stockfishRec.to,
+            label: `SF • ${stockfishRec.evalDisplay}`,
+            san: stockfishRec.san,
+            color: '#2563eb',
+          });
+        }
+
+        if (maiaRec && maiaRec.move) {
+          arrows.push({
+            from: maiaRec.from,
+            to: maiaRec.to,
+            label: `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
+            san: maiaRec.san,
+            color: '#7c3aed',
+          });
+        }
+
+        if (personalRec && personalRec.move && personalStatus.isUnlocked) {
+          arrows.push({
+            from: personalRec.from,
+            to: personalRec.to,
+            label: `MP • ${personalRec.evalDisplay}`,
+            san: personalRec.san,
+            color: '#d97706',
+          });
+        }
+
+        if (chessjsRec && chessjsRec.move) {
+          const moveText =
+            chessjsRec.simpleMoveText ||
+            `${chessjsRec.avoidPieceName || 'Pieza'} a ${chessjsRec.to || chessjsRec.san}`;
+          arrows.push({
+            from: chessjsRec.from,
+            to: chessjsRec.to,
+            label: `⚠️ ${moveText}`,
+            san: chessjsRec.san,
+            color: '#fb7185',
+          });
+        }
+      }
+
+      // Compute Agreements
+      const moveEngineMap = new Map<string, { san: string; engines: EngineType[] }>();
+      const allRecs: Array<{ engine: EngineType; rec: EngineRecommendation | null }> = [
+        { engine: 'stockfish', rec: stockfishRec },
+        { engine: 'garbo', rec: garboRec },
+        { engine: 'maia', rec: maiaRec },
+        { engine: 'personal', rec: personalRec },
+      ];
+
+      for (const item of allRecs) {
+        if (item.rec && item.rec.move) {
+          const existing = moveEngineMap.get(item.rec.move);
+          if (existing) {
+            existing.engines.push(item.engine);
+          } else {
+            moveEngineMap.set(item.rec.move, { san: item.rec.san, engines: [item.engine] });
+          }
+        }
+      }
+
+      const agreements = Array.from(moveEngineMap.entries())
+        .filter(([_, data]) => data.engines.length > 1)
+        .map(([move, data]) => ({
+          move,
+          san: data.san,
+          engines: data.engines,
+        }));
+
+      this.state = {
+        ...this.state,
+        gameId,
+        positionId,
+        generation,
+        fen,
+        isGameOver: false,
+        stockfishRequestedThisTurn: false,
+        garboRequestedThisTurn: false,
+        thinkingTime,
+        candidateArrows: arrows,
+        agreements,
+        personalEngineUnlocked: personalStatus.isUnlocked,
+        personalProgress: `${personalStatus.gamesPlayed} / 10 partidas`,
+        recommendations: {
+          stockfish: stockfishRec,
+          garbo: garboRec,
+          maia: maiaRec,
+          personal: personalRec,
+          chessjs: chessjsRec,
+        },
+        loadingStates: {
+          stockfish: false,
+          garbo: false,
+          maia: false,
+          personal: false,
+          chessjs: false,
+        },
+      };
+
+      this.onStateChange(this.state);
+    });
 
     // Refinar de forma asíncrona con Stockfish 19 WASM real si está operativo
     const currentFen = fen;
@@ -577,7 +633,7 @@ export class ChessSupervisor {
       // La posición cambió mientras se pensaba: el resultado ya no sirve
       if (this.state.generation !== generation || this.state.isGameOver) return;
 
-      const rec = garboRecommendationFromReal(real);
+      const rec = garboRecommendationFromReal(real, new Chess(fen));
       const shouldSuppress = this.shouldSuppressArrows(fen);
       let arrows: CandidateArrow[] = [];
       if (!shouldSuppress) {
@@ -688,7 +744,7 @@ export class ChessSupervisor {
     let rec: EngineRecommendation | null = null;
     try {
       const real = await realGarbo.analyze(chess.fen(), { movetime: 800 });
-      if (real) rec = garboRecommendationFromReal(real, 'GarboChess (a demanda)');
+      if (real) rec = garboRecommendationFromReal(real, chess, 'GarboChess (a demanda)');
     } catch {
       // se usa la heurística de respaldo
     }

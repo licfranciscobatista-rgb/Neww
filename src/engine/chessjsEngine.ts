@@ -24,6 +24,145 @@ const PIECE_NAMES: Record<string, string> = {
   k: 'Rey',
 };
 
+const PIECE_SYMBOLS: Record<string, string> = {
+  p: '♟',
+  n: '♞',
+  b: '♝',
+  r: '♜',
+  q: '♛',
+  k: '♚',
+};
+
+export interface BadIdeaAnalysis {
+  pieceName: string;
+  pieceSymbol: string;
+  ideaSummary: string;
+  ideaDetail: string;
+}
+
+export function formatSimpleMoveText(pieceName: string, toSquare: string, san: string): string {
+  if (san.startsWith('O-O-O')) return 'Rey enroque largo';
+  if (san.startsWith('O-O')) return 'Rey enroque corto';
+  return `${pieceName} a ${toSquare}`;
+}
+
+/**
+ * Diagnostica con precisión qué pieza realiza la mala jugada y qué idea errónea
+ * o vicio estratégico tiene dicho movimiento (por ejemplo: caballo al borde, cede el centro,
+ * debilita el enroque, bloquea desarrollo de piezas, etc.).
+ */
+export function diagnoseBadIdea(
+  chess: Chess,
+  move: { from: string; to: string; san: string }
+): BadIdeaAnalysis {
+  const piece = chess.get(move.from as Square);
+  const pieceType = piece ? piece.type : 'p';
+  const pieceName = PIECE_NAMES[pieceType] || 'Pieza';
+  const pieceSymbol = PIECE_SYMBOLS[pieceType] || '♟';
+  const isWhite = piece ? piece.color === 'w' : true;
+
+  const fromRank = parseInt(move.from[1], 10);
+  const toRank = parseInt(move.to[1], 10);
+  const fromFile = move.from.charCodeAt(0) - 97;
+  const toFile = move.to.charCodeAt(0) - 97;
+
+  const isBackward = isWhite ? toRank < fromRank : toRank > fromRank;
+  const isRim = toFile === 0 || toFile === 7;
+  const fromCenter = fromFile >= 2 && fromFile <= 5 && fromRank >= 3 && fromRank <= 6;
+  const toCenter = toFile >= 2 && toFile <= 5 && toRank >= 3 && toRank <= 6;
+
+  let ideaSummary = 'Jugada pasiva';
+  let ideaDetail = `Mover el ${pieceName.toLowerCase()} a ${move.to.toUpperCase()} cede iniciativa sin generar amenazas útiles.`;
+
+  // 1. Rey
+  if (pieceType === 'k') {
+    if (move.san.startsWith('O-O')) {
+      ideaSummary = 'Enroque a destiempo';
+      ideaDetail = 'Enrocar en esta posición facilita la iniciativa o ataque rival en ese flanco.';
+    } else {
+      ideaSummary = 'Expone al rey / Pierde enroque';
+      ideaDetail = `Mover el rey a ${move.to.toUpperCase()} pierde el derecho a enrocar y expone al monarca.`;
+    }
+  }
+  // 2. Caballo
+  else if (pieceType === 'n') {
+    if (isRim) {
+      ideaSummary = 'Caballo al borde (pierde radio)';
+      ideaDetail = `Llevar el caballo a la banda (${move.to.toUpperCase()}) reduce su campo de acción a la mitad y lo aleja del centro.`;
+    } else if (isBackward) {
+      ideaSummary = 'Retirada pasiva de caballo';
+      ideaDetail = `Retroceder el caballo a ${move.to.toUpperCase()} cede casillas centrales y alivia la presión sobre el rival.`;
+    } else if (fromCenter && !toCenter) {
+      ideaSummary = 'Abandona el centro con caballo';
+      ideaDetail = `Desaloja el caballo de una casilla activa para colocarlo en la periferia sin objetivo concreto.`;
+    } else {
+      ideaSummary = 'Salto pasivo sin presión';
+      ideaDetail = `El caballo en ${move.to.toUpperCase()} no presiona debilidades y estorba la coordinación armónica de las piezas.`;
+    }
+  }
+  // 3. Alfil
+  else if (pieceType === 'b') {
+    if (isBackward) {
+      ideaSummary = 'Retirada pasiva de alfil';
+      ideaDetail = `El alfil retrocede a ${move.to.toUpperCase()} cediendo el control sobre diagonales activas.`;
+    } else if (isRim) {
+      ideaSummary = 'Alfil descentralizado';
+      ideaDetail = `Llevar el alfil al borde (${move.to.toUpperCase()}) limita su alcance y visión sobre el centro.`;
+    } else if (move.to === 'd2' || move.to === 'e2' || move.to === 'd7' || move.to === 'e7') {
+      ideaSummary = 'Bloquea desarrollo de piezas';
+      ideaDetail = `El alfil en ${move.to.toUpperCase()} obstruye la salida natural de otras piezas menores o de la dama.`;
+    } else {
+      ideaSummary = 'Diagonal ineficaz';
+      ideaDetail = `El alfil apunta hacia una diagonal tapada o sin impacto contra la posición enemiga.`;
+    }
+  }
+  // 4. Peón
+  else if (pieceType === 'p') {
+    const isFlankPawn = toFile === 0 || toFile === 7 || toFile === 1 || toFile === 6;
+    if (isFlankPawn && (move.from.startsWith('f') || move.from.startsWith('g') || move.from.startsWith('h'))) {
+      ideaSummary = 'Debilita el enroque';
+      ideaDetail = `Avanzar este peón (${move.san}) abre brechas en el enroque y crea debilidades permanentes cerca del rey.`;
+    } else if (isFlankPawn) {
+      ideaSummary = 'Avance prematuro de flanco';
+      ideaDetail = `Mover peones laterales (${move.san}) malgasta tiempos sin disputar el control del centro.`;
+    } else if (move.to === 'd3' || move.to === 'e3' || move.to === 'd6' || move.to === 'e6') {
+      ideaSummary = 'Encierra su propio alfil';
+      ideaDetail = `El avance de este peón (${move.san}) bloquea la diagonal natural de su propio alfil.`;
+    } else {
+      ideaSummary = 'Debilita casillas clave';
+      ideaDetail = `El avance (${move.san}) crea casillas débiles que no podrán ser defendidas por peones.`;
+    }
+  }
+  // 5. Torre
+  else if (pieceType === 'r') {
+    if (isBackward) {
+      ideaSummary = 'Retirada pasiva de torre';
+      ideaDetail = `La torre se repliega a una posición inactiva abandonando columnas abiertas.`;
+    } else {
+      ideaSummary = 'Torre en columna cerrada';
+      ideaDetail = `La torre en ${move.to.toUpperCase()} queda tapada tras peones propios sin líneas abiertas para actuar.`;
+    }
+  }
+  // 6. Dama
+  else if (pieceType === 'q') {
+    const moveCount = chess.history().length;
+    if (moveCount < 16) {
+      ideaSummary = 'Salida prematura de dama';
+      ideaDetail = `Sacar la dama a ${move.to.toUpperCase()} tan temprano la expone a ser acosada por piezas menores rivales con pérdida de tiempos.`;
+    } else {
+      ideaSummary = 'Dama alejada de la acción';
+      ideaDetail = `Llevar la dama a ${move.to.toUpperCase()} la desconecta de la coordinación defensiva u ofensiva del resto del bando.`;
+    }
+  }
+
+  return {
+    pieceName,
+    pieceSymbol,
+    ideaSummary,
+    ideaDetail,
+  };
+}
+
 /**
  * Verifica si la pieza que se acaba de mover queda colgada o se pierde material.
  * Devuelve true si el rival puede capturarla impunemente (regalo de pieza).
@@ -89,6 +228,12 @@ export function runChessJsRecommendation(
   // Si solo hay 1 jugada forzada
   if (legalMoves.length === 1) {
     const onlyMove = legalMoves[0];
+    const piece = chess.get(onlyMove.from as Square);
+    const pieceName = piece ? (PIECE_NAMES[piece.type] || 'Pieza') : 'Pieza';
+    const pieceSymbol = piece ? (PIECE_SYMBOLS[piece.type] || '♟') : '♟';
+
+    const simpleMoveText = formatSimpleMoveText(pieceName, onlyMove.to, onlyMove.san);
+
     return {
       engine: 'chessjs',
       engineName: 'Chess.js (Reglas)',
@@ -96,10 +241,15 @@ export function runChessJsRecommendation(
       from: onlyMove.from,
       to: onlyMove.to,
       san: onlyMove.san,
+      avoidPieceName: pieceName,
+      avoidPieceSymbol: pieceSymbol,
+      simpleMoveText,
+      badIdeaSummary: 'Única jugada legal',
+      badIdeaDetail: `Obligado a mover el ${pieceName.toLowerCase()} (${onlyMove.san}).`,
       evaluation: 0,
       evalDisplay: 'Forzada',
       confidence: 50,
-      explanation: 'Única jugada legal según las reglas de ajedrez.',
+      explanation: `${simpleMoveText} (${onlyMove.san})`,
       color: '#fb7185',
       timeTakenMs: 1,
       timestamp: Date.now(),
@@ -175,19 +325,24 @@ export function runChessJsRecommendation(
   const lossPoints = (rawDiff / 100).toFixed(2);
   const displayScore = `-${lossPoints} pts`;
 
-  // Identificar la pieza para dar una explicación rica y personalizada
-  const movedPiece = chess.get(selectedCandidate.from as Square);
-  const pieceName = movedPiece ? (PIECE_NAMES[movedPiece.type] || 'Pieza') : 'Pieza';
+  // Diagnosticar con precisión qué pieza y qué idea errónea/viciosa tiene la jugada
+  const diag = diagnoseBadIdea(chess, selectedCandidate);
+  const simpleMoveText = formatSimpleMoveText(diag.pieceName, selectedCandidate.to, selectedCandidate.san);
 
-  const explanation = `Jugada pasiva / pérdida de tiempo (${displayScore}): El ${pieceName.toLowerCase()} se mueve a una casilla segura (${selectedCandidate.to.toUpperCase()}) sin peligro de ser capturado, pero cede iniciativa o coordinación. Hace perder puntuación posicional sin entregar piezas.`;
+  const explanation = `${simpleMoveText} (${selectedCandidate.san})`;
 
   return {
     engine: 'chessjs',
-    engineName: 'Chess.js (Reglas)',
+    engineName: 'Chess.js (Árbitro)',
     move: selectedCandidate.move,
     from: selectedCandidate.from,
     to: selectedCandidate.to,
     san: selectedCandidate.san,
+    avoidPieceName: diag.pieceName,
+    avoidPieceSymbol: diag.pieceSymbol,
+    simpleMoveText,
+    badIdeaSummary: diag.ideaSummary,
+    badIdeaDetail: diag.ideaDetail,
     evaluation: selectedCandidate.score,
     evalDisplay: `${displayScore} (Posicional)`,
     confidence: 42,
