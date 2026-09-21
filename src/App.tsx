@@ -488,6 +488,8 @@ export function App() {
       handleResetPosition();
       return;
     }
+    // Pausar el reloj inmediatamente para que no siga corriendo mientras el usuario decide el desenlace
+    setIsClockRunning(false);
     // Abrir modal interactivo para consultar quién ganó y el motivo
     setIsFinishModalOpen(true);
   };

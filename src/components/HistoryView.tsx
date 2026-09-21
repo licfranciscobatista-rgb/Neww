@@ -187,21 +187,51 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <div className="space-y-1 min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-white text-xs truncate">{game.title}</span>
-                  <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
-                    game.result === '1-0'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : game.result === '0-1'
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                      : 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                  }`}>
-                    {game.result}
-                  </span>
+                  {(() => {
+                    const isDraw = game.result === '1/2-1/2';
+                    const isWin =
+                      (game.playerColor === 'w' && game.result === '1-0') ||
+                      (game.playerColor === 'b' && game.result === '0-1');
+                    const isLoss =
+                      (game.playerColor === 'w' && game.result === '0-1') ||
+                      (game.playerColor === 'b' && game.result === '1-0');
+
+                    if (isDraw) {
+                      return (
+                        <span className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border bg-sky-500/20 text-sky-300 border-sky-500/40 flex items-center gap-1">
+                          <span>🤝 Empate</span>
+                          <span>(½ - ½)</span>
+                        </span>
+                      );
+                    }
+                    if (isWin) {
+                      return (
+                        <span className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 flex items-center gap-1">
+                          <span>🏆 Victoria</span>
+                          <span>({game.result})</span>
+                        </span>
+                      );
+                    }
+                    if (isLoss) {
+                      return (
+                        <span className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border bg-rose-500/20 text-rose-300 border-rose-500/40 flex items-center gap-1">
+                          <span>🏳️ Derrota</span>
+                          <span>({game.result})</span>
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border bg-slate-800 text-slate-300 border-slate-700">
+                        {game.result}
+                      </span>
+                    );
+                  })()}
                   {game.reason && (
                     <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 text-[10px] border border-slate-700">
                       {game.reason}
                     </span>
                   )}
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-slate-400 font-medium">
                     {game.playerColor === 'w' ? '♔ Blancas' : '♚ Negras'}
                   </span>
                 </div>
