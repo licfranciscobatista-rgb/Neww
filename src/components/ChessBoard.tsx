@@ -186,8 +186,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const list: ArrowRenderItem[] = [];
     const moveKeyMap = new Map<string, ArrowRenderItem>();
-    // Stockfish, Maia y Motor Personal dibujan flechas en el tablero; Chess.js como advertencia de jugada dudosa
-    const engineOrder: EngineType[] = ['stockfish', 'maia', 'personal', 'chessjs'];
+    // Stockfish, Maia, Personal, Chess.js y GarboChess pueden dibujar indicadores en el tablero.
+    const engineOrder: EngineType[] = ['stockfish', 'maia', 'personal', 'chessjs', 'garbo'];
 
     for (const eng of engineOrder) {
       if (!activeArrowFilter[eng]) continue;
