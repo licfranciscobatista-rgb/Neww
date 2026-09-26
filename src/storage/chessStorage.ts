@@ -238,13 +238,14 @@ export function saveGameRecord(record: GameRecord): PlayerProfile {
 
     const games = loadGameHistory();
     const updated = [compactRecord, ...games.filter((g) => g.id !== record.id)];
-    inMemoryGamesCache = updated.slice(0, 100);
+    const cappedGames = updated.slice(0, 100);
+    inMemoryGamesCache = cappedGames;
     localStorage.setItem(GAMES_KEY, JSON.stringify(inMemoryGamesCache));
 
     // Recompute profile once with updated games
     const baseProfile = inMemoryProfileCache || DEFAULT_PROFILE;
-    const recomputed = computeProfileFromGames(updated, baseProfile);
-    inMemoryGamesHash = `${updated.length}_${record.id}`;
+    const recomputed = computeProfileFromGames(cappedGames, baseProfile);
+    inMemoryGamesHash = `${cappedGames.length}_${record.id}`;
     savePlayerProfile(recomputed);
     return recomputed;
   } catch (e) {
