@@ -46,14 +46,14 @@ interface SearchJob {
   lastPv: string;
 }
 
-// Compilar y cargar el .wasm en un teléfono modesto puede tardar bastante la primera vez.
-const INIT_TIMEOUT_MS = 15000;
-const MAX_INIT_ATTEMPTS = 3;
-// Margen extra sobre `movetime` antes de dar por bloqueada una búsqueda.
-const SEARCH_SLACK_MS = 2000;
-const DEPTH_SEARCH_TIMEOUT_MS = 30000;
-// Tiempo que se espera tras `stop` antes de reiniciar el worker.
-const STOP_GRACE_MS = 2000;
+// Compilar y cargar el .wasm con límites estrictos para jamás colgar una tablet
+const INIT_TIMEOUT_MS = 3500;
+const MAX_INIT_ATTEMPTS = 2;
+// Margen estricto sobre movetime antes de forzar fallback instantáneo
+const SEARCH_SLACK_MS = 600;
+const DEPTH_SEARCH_TIMEOUT_MS = 2500;
+// Tiempo de espera tras stop
+const STOP_GRACE_MS = 400;
 
 class RealStockfishManager {
   private worker: Worker | null = null;
@@ -306,7 +306,7 @@ class RealStockfishManager {
     return new Promise<RealStockfishAnalysis | null>((resolve) => {
       const job: SearchJob = {
         fen,
-        movetime: options.movetime ?? 600,
+        movetime: options.movetime ?? 180,
         depth: options.depth,
         limitElo: options.limitElo,
         resolve,

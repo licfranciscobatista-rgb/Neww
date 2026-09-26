@@ -157,90 +157,83 @@ export function evaluateMovesStockfish(chess: Chess, _depth = 2): ScoredMove[] {
 
   const turn = chess.turn();
   const isWhite = turn === 'w';
+  const oppColor = isWhite ? 'b' : 'w';
   const theoryMoves = new Set(getReliableTheoryMoves(chess));
 
   const scoredMoves: ScoredMove[] = [];
 
   for (const move of legalMoves) {
-    const executed = chess.move({
-      from: move.from as Square,
-      to: move.to as Square,
-      promotion: move.promotion || 'q',
-    });
-    if (!executed) continue;
+    let executed = false;
+    try {
+      const res = chess.move({
+        from: move.from as Square,
+        to: move.to as Square,
+        promotion: move.promotion || 'q',
+      });
+      if (!res) continue;
+      executed = true;
 
-    // 1. Si la jugada da jaque mate, es victoria inmediata (+/- 99999)
-    if (chess.isCheckmate()) {
-      chess.undo();
+      // 1. Si la jugada da jaque mate, es victoria inmediata (+/- 99999)
+      if (chess.isCheckmate()) {
+        scoredMoves.push({
+          move: `${move.from}${move.to}${move.promotion || ''}`,
+          san: move.san,
+          from: move.from,
+          to: move.to,
+          score: isWhite ? 99999 : -99999,
+        });
+        continue;
+      }
+
+      // 2. Evaluación posicional base (Material + PeSTO PST)
+      let score = staticEvaluate(chess);
+
+      // 3. Verificación táctica ultra-rápida O(1) por casilla atacada (garantía 60 FPS en tablets)
+      const isTargetAttacked = chess.isAttacked(move.to as Square, oppColor);
+      if (isTargetAttacked) {
+        const isDefended = chess.isAttacked(move.to as Square, turn);
+        const pieceVal = PIECE_BASE_VALUES[move.piece] || 100;
+
+        if (!isDefended) {
+          // Pieza mayor/menor colgada sin defensa
+          const penalty = pieceVal;
+          score += isWhite ? -penalty : penalty;
+        } else if (move.piece === 'q' || move.piece === 'r') {
+          // Pieza pesada atacada en casilla defendida: riesgo de cambio desfavorable contra pieza menor
+          const tradeRisk = Math.max(50, pieceVal - 330);
+          score += isWhite ? -tradeRisk : tradeRisk;
+        }
+      }
+
+      // Bonificación de iniciativa por jaque
+      if (chess.inCheck()) {
+        score += isWhite ? 25 : -25;
+      }
+
+      // Bonificación de seguridad por enroque
+      if (move.san === 'O-O' || move.san === 'O-O-O') {
+        score += isWhite ? 45 : -45;
+      }
+
+      // Bonificación de apertura teórica magistral
+      if (theoryMoves.has(move.san)) {
+        score += isWhite ? 40 : -40;
+      }
+
       scoredMoves.push({
         move: `${move.from}${move.to}${move.promotion || ''}`,
         san: move.san,
         from: move.from,
         to: move.to,
-        score: isWhite ? 99999 : -99999,
+        score,
       });
-      continue;
-    }
-
-    // 2. Evaluación posicional base (Material + PeSTO PST)
-    let score = staticEvaluate(chess);
-
-    // 3. Verificación táctica de 1-ply ultrarrápida sin sobrecarga de memoria
-    const opponentReplies = chess.moves({ verbose: true });
-    let maxTacticalPenalty = 0;
-
-    // Chequeo de capturas directas del rival
-    for (const reply of opponentReplies) {
-      if (reply.captured) {
-        const victimValue = PIECE_BASE_VALUES[reply.captured] || 100;
-        const attackerValue = PIECE_BASE_VALUES[reply.piece] || 100;
-
-        // Comprobar si tras la captura nuestro bando defiende la casilla
-        chess.move(reply);
-        const isDefended = chess.isAttacked(reply.to as Square, turn);
+    } catch {
+      // Tolerancia si falla movimiento
+    } finally {
+      if (executed) {
         chess.undo();
-
-        if (!isDefended) {
-          // Pieza colgada gratis para el rival
-          if (victimValue > maxTacticalPenalty) {
-            maxTacticalPenalty = victimValue;
-          }
-        } else if (attackerValue < victimValue) {
-          // Intercambio ventajoso para el rival
-          const tradeLoss = victimValue - attackerValue;
-          if (tradeLoss > maxTacticalPenalty) {
-            maxTacticalPenalty = tradeLoss;
-          }
-        }
       }
     }
-
-    // Aplicar la penalización táctica al bando que movió
-    if (isWhite) {
-      score -= maxTacticalPenalty;
-    } else {
-      score += maxTacticalPenalty;
-    }
-
-    // Bonificación de seguridad: si la jugada enroca, añadir bonificación
-    if (move.san === 'O-O' || move.san === 'O-O-O') {
-      score += isWhite ? 45 : -45;
-    }
-
-    // Bonificación de apertura teórica magistral
-    if (theoryMoves.has(move.san)) {
-      score += isWhite ? 40 : -40;
-    }
-
-    chess.undo();
-
-    scoredMoves.push({
-      move: `${move.from}${move.to}${move.promotion || ''}`,
-      san: move.san,
-      from: move.from,
-      to: move.to,
-      score,
-    });
   }
 
   // Ordenar según el bando:

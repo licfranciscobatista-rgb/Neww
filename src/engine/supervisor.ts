@@ -144,14 +144,10 @@ export class ChessSupervisor {
   public shouldSuppressArrows(fen?: string): boolean {
     if (this.lastShowLinesMode === 'none') return true;
     if (this.lastShowLinesMode === 'my_turn_only') {
-      try {
-        const targetFen = fen || this.state.fen;
-        if (!targetFen) return false;
-        const turn = new Chess(targetFen).turn();
-        return turn !== this.lastUserColor;
-      } catch {
-        return false;
-      }
+      const targetFen = fen || this.state.fen;
+      if (!targetFen) return false;
+      const turn = targetFen.split(' ')[1] || 'w';
+      return turn !== this.lastUserColor;
     }
     return false;
   }
@@ -492,12 +488,15 @@ export class ChessSupervisor {
       this.onStateChange(this.state);
     });
 
-    // Refinar de forma asíncrona con Stockfish 19 WASM real si está operativo
-    const currentFen = fen;
-    const currentGen = generation;
-    realStockfish
-      .analyze(currentFen, { movetime: 500 })
-      .then((real) => {
+    // Refinar de forma asíncrona con Stockfish 19 WASM real solo en el turno del jugador (180ms)
+    // para jamás saturar la cola del motor ni robar recursos si la IA está por responder
+    const isPlayerTurn = chess.turn() === userColor;
+    if (isPlayerTurn && realStockfish.isReady()) {
+      const currentFen = fen;
+      const currentGen = generation;
+      realStockfish
+        .analyze(currentFen, { movetime: 180 })
+        .then((real) => {
         if (!real || !real.from || !real.to) return;
         if (this.state.generation !== currentGen || this.state.isGameOver) return;
 
@@ -563,6 +562,7 @@ export class ChessSupervisor {
         this.onStateChange(this.state);
       })
       .catch(() => {});
+    }
 
     // Garbo y Maia actúan como recomendaciones teóricas directas (evaluación heurística inmediata sin workers en segundo plano)
     // para preservar al 100% la memoria RAM (3GB) y CPU en tablets.

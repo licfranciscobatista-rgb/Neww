@@ -181,15 +181,27 @@ export interface PersonalEngineStatus {
   compiledDNA?: PersonalEngineDNAFile;
 }
 
+// Caché de estado del motor personal para evitar recálculos en el hilo de juego
+let cachedPersonalStatus: PersonalEngineStatus | null = null;
+let cachedPersonalHash = '';
+
 export function getPersonalEngineStatus(
   profile: PlayerProfile,
   games?: GameRecord[],
-  currentChess?: Chess
+  currentChess?: Chess,
+  includeDNA = false
 ): PersonalEngineStatus {
   try {
     const storedGames = games || loadGameRecords();
+    const hash = `${storedGames.length}_${storedGames[0]?.id || ''}_${profile.gamesPlayed}_${includeDNA}`;
+
+    if (!currentChess && cachedPersonalStatus && cachedPersonalHash === hash) {
+      return cachedPersonalStatus;
+    }
+
     const distilled = HistoryAssistant.analyzeAndDistill(storedGames);
-    const compiledDNA = compilePersonalEngineDNA(profile, storedGames, distilled);
+    // Solo compilar DNA pesado cuando se solicite explícitamente (ej: pestaña Perfil), jamás en cada jugada
+    const compiledDNA = includeDNA ? compilePersonalEngineDNA(profile, storedGames, distilled) : undefined;
 
     const effectiveGames = Math.max(profile.gamesPlayed, distilled.manualGamesCount);
     const requiredGames = 10;
@@ -197,7 +209,7 @@ export function getPersonalEngineStatus(
     const progressPercent = Math.min(100, Math.round((effectiveGames / requiredGames) * 100));
 
     let subEngineReport: PersonalAuditReport | undefined;
-    if (currentChess) {
+    if (currentChess && isUnlocked) {
       subEngineReport = runSubEngineAudit(currentChess, distilled, storedGames);
     }
 
@@ -210,7 +222,7 @@ export function getPersonalEngineStatus(
       statusMessage = `Motor Personal Bloqueado (0/${requiredGames}): Requiere 10 partidas jugadas por ti para calibrar tu árbol de decisiones y biotipo propio.`;
     }
 
-    return {
+    const result: PersonalEngineStatus = {
       isUnlocked,
       gamesPlayed: effectiveGames,
       requiredGames,
@@ -223,6 +235,13 @@ export function getPersonalEngineStatus(
       subEngineReport,
       compiledDNA,
     };
+
+    if (!currentChess) {
+      cachedPersonalStatus = result;
+      cachedPersonalHash = hash;
+    }
+
+    return result;
   } catch {
     return {
       isUnlocked: false,
@@ -260,7 +279,7 @@ export function runPersonalRecommendation(
 
   try {
     const storedGames = games || loadGameRecords();
-    const status = getPersonalEngineStatus(profile, storedGames, chess);
+    const status = getPersonalEngineStatus(profile, storedGames);
 
     // REGLA ESTRICTA Y HONESTA: Si no hay al menos 10 partidas, el motor NO proyecta jugadas inventadas
     if (!status.isUnlocked) {
@@ -272,7 +291,7 @@ export function runPersonalRecommendation(
 
     const distilled = status.distilledData;
 
-    // Ejecución de los 8 Sub-Motores autónomos
+    // Ejecución única de los 8 Sub-Motores autónomos
     const auditReport = runSubEngineAudit(chess, distilled, storedGames, timeRemainingSeconds);
     const verdicts = auditReport.subEngineVerdicts;
 

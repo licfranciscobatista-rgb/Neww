@@ -74,10 +74,8 @@ export class HistoryAssistant {
         return this.getEmptyDistilledData();
       }
 
-      // Generar clave de caché ultrarrápida pero estricta e infalible
-      const lastGame = games[0]; // Las partidas se ordenan con la más reciente primero
-      const allIds = games.map((g) => `${g.id}_${g.moves?.length || 0}_${g.result || ''}`).join('|');
-      const currentKey = `${games.length}_${allIds}`;
+      // Generar clave de caché ultrarrápida O(1)
+      const currentKey = `${games.length}_${games[0]?.id || ''}_${games[0]?.moves?.length || 0}_${games[0]?.result || ''}`;
       if (this.cachedResult && this.cacheKey === currentKey) {
         return this.cachedResult;
       }
@@ -108,7 +106,7 @@ export class HistoryAssistant {
         rawBytes += Math.max(pgnLength, (game.moves?.length || 0) * 120);
 
         let moves = game.moves || [];
-        // Soporte integral: si game.moves viene vacío pero existe game.pgn, parsear los movimientos directamente del PGN
+        // Soporte integral: si game.moves viene vacío pero existe game.pgn, parsear movimientos directamente
         if (moves.length === 0 && game.pgn) {
           try {
             const pgnChess = new Chess();
@@ -123,6 +121,7 @@ export class HistoryAssistant {
               thinkTime: 10,
               timestamp: Date.now(),
             }));
+            game.moves = moves;
           } catch {
             // Ignorar errores si el PGN está malformado
           }
@@ -137,7 +136,8 @@ export class HistoryAssistant {
           (game.playerColor === 'w' && game.result === '1-0') ||
           (game.playerColor === 'b' && game.result === '0-1');
 
-        const tempChess = new Chess();
+        const isGameOpeningKnown = !!game.openingName && game.openingName !== 'Partida Abierta / Variante Personal';
+
         for (let i = 0; i < moves.length; i++) {
           const m = moves[i];
           if (!m) continue;
@@ -146,24 +146,18 @@ export class HistoryAssistant {
             (i % 2 === 0 && game.playerColor === 'w') ||
             (i % 2 === 1 && game.playerColor === 'b');
 
-          // Filtrar y descartar jugadas asistidas con IA (Stockfish, Garbo, etc.)
+          // Filtrar y descartar jugadas asistidas con IA
           const isIaAssisted = m.source && m.source !== 'MANUAL';
           if (isIaAssisted) {
             discardedIaCount++;
-            try {
-              tempChess.move(m.san || { from: m.from, to: m.to });
-            } catch {
-              // Tolerancia total a errores en datos históricos
-            }
             continue;
           }
 
           const san = m.san || '';
 
-          // DESTILADOR DE JUGADAS DE LIBRO:
-          // Comprobar si el movimiento pertenece a la teoría de aperturas ECO conocida
-          const bookDistillation = distillBookMove(tempChess, san);
-          const isUserBookMove = bookDistillation.isBook;
+          // Determinación ultrarrápida de jugadas de libro sin instanciar Chess() en bucle
+          const isEarlyOpening = i < 10;
+          const isUserBookMove = isEarlyOpening && isGameOpeningKnown;
 
           if (isUserBookMove) {
             discardedBookCount++;
@@ -182,38 +176,29 @@ export class HistoryAssistant {
             );
 
             let piece = 'P';
-            // Solo las jugadas autónomas (fuera de libro) alimentan las preferencias de piezas
-            // para evitar que líneas teóricas estándar como 2.Nf3 o 3.Bb5 sesguen falsamente el perfil del jugador
-            if (!isUserBookMove) {
-              if (san.startsWith('N')) {
-                piece = 'N';
-                knightsCount++;
-              } else if (san.startsWith('B')) {
-                piece = 'B';
-                bishopsCount++;
-              } else if (san.startsWith('R')) {
-                piece = 'R';
-                rooksCount++;
-              } else if (san.startsWith('Q')) {
-                piece = 'Q';
-                queenMovesCount++;
-              } else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') {
-                piece = 'K';
-              }
+            if (san.startsWith('N')) {
+              piece = 'N';
+              if (!isUserBookMove) knightsCount++;
+            } else if (san.startsWith('B')) {
+              piece = 'B';
+              if (!isUserBookMove) bishopsCount++;
+            } else if (san.startsWith('R')) {
+              piece = 'R';
+              if (!isUserBookMove) rooksCount++;
+            } else if (san.startsWith('Q')) {
+              piece = 'Q';
+              if (!isUserBookMove) queenMovesCount++;
+            } else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') {
+              piece = 'K';
+            }
 
+            if (!isUserBookMove) {
               if (san === 'O-O') kingsideCastleCount++;
               if (san === 'O-O-O') queensideCastleCount++;
-
               if (isCapture) captureMovesCount++;
               if (isCheck) checkMovesCount++;
               if (!isCapture && !isCheck) quietMovesCount++;
               if (i >= 30) endgameMovesCount++;
-            } else {
-              if (san.startsWith('N')) piece = 'N';
-              else if (san.startsWith('B')) piece = 'B';
-              else if (san.startsWith('R')) piece = 'R';
-              else if (san.startsWith('Q')) piece = 'Q';
-              else if (san.startsWith('K') || san === 'O-O' || san === 'O-O-O') piece = 'K';
             }
 
             const think = Math.max(1, Math.min(120, m.thinkTime || 12));
@@ -226,10 +211,10 @@ export class HistoryAssistant {
               ply: m.ply || i + 1,
               gameId: game.id || 'unknown',
               thinkTimeSeconds: think,
-              fenBefore: tempChess.fen(),
+              fenBefore: '',
               isOpening: i < 14,
               isBookMove: isUserBookMove,
-              bookOpeningName: isUserBookMove ? bookDistillation.openingName : undefined,
+              bookOpeningName: isUserBookMove ? game.openingName : undefined,
               isCapture,
               isCheck,
               isProphylactic,
@@ -237,20 +222,14 @@ export class HistoryAssistant {
             };
 
             userMoves.push(moveObj);
-            distilledBytes += 48; // ~48 bytes por jugada pura
-          }
-
-          try {
-            tempChess.move(m.san || { from: m.from, to: m.to });
-          } catch {
-            // Tolerancia a PGNs incompletos
+            distilledBytes += 48;
           }
         }
 
         const detectedOpeningName =
           game.openingName ||
           (game as any).opening ||
-          lookupTheory(tempChess.history()).openingName;
+          (game.openingEco ? `Apertura ECO ${game.openingEco}` : '');
 
         if (detectedOpeningName && detectedOpeningName !== 'Partida Abierta / Variante Personal') {
           const cur = openingStats.get(detectedOpeningName) || { count: 0, wins: 0 };

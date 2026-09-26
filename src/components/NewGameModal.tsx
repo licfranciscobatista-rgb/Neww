@@ -26,15 +26,11 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
   const [selectedMode, setSelectedMode] = useState<'vs_ai' | 'manual_board'>('vs_ai');
   const [selectedTime, setSelectedTime] = useState<number>(600);
   const [selectedLinesMode, setSelectedLinesMode] = useState<ShowLinesMode>('my_turn_only');
-  const [preflight, setPreflight] = useState<SubDirectorPreflightResult | null>(() => {
-    return subDirectorAuditor.getOrRunCertification();
-  });
+  const [preflight, setPreflight] = useState<SubDirectorPreflightResult | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      void subDirectorAuditor.auditAndCertifyEngines().then((res) => {
-        setPreflight(res);
-      });
+      setPreflight(subDirectorAuditor.getOrRunCertification());
     }
   }, [isOpen]);
 

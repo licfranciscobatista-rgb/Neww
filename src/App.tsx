@@ -241,13 +241,16 @@ export function App() {
         }
       }
 
-      // 2) Stockfish WebAssembly de baja latencia (movetime: 180ms)
+      // 2) Stockfish WebAssembly de baja latencia (movetime: 180ms con límite estricto de 500ms)
       if (!moveChoice) {
         try {
-          const real = await realStockfish.analyze(chess.fen(), {
+          const sfPromise = realStockfish.analyze(chess.fen(), {
             movetime: 180,
             limitElo: AI_OPPONENT_ELO,
           });
+          // Timeout estricto de 500ms para tablets modestas: si tarda más, respaldo instantáneo (<2ms)
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
+          const real = await Promise.race([sfPromise, timeoutPromise]);
           if (cancelled) return;
           if (real && real.from && real.to) {
             moveChoice = { from: real.from, to: real.to, promotion: real.promotion };
@@ -352,14 +355,10 @@ export function App() {
           finalFen: newChess.fen(),
         };
 
-        saveGameRecord(newRecord);
+        const updatedProfile = saveGameRecord(newRecord);
         const updatedGames = [newRecord, ...games.filter((g) => g.id !== newRecord.id)];
         setGames(updatedGames);
-
-        // Actualizar estadísticas reales del perfil
-        const updatedProfile = computeProfileFromGames(updatedGames, profile);
         setProfile(updatedProfile);
-        savePlayerProfile(updatedProfile);
 
         // Registrar auditoría en el Director de Control
         controlDirector.recordStockfishAudit({
@@ -404,7 +403,6 @@ export function App() {
   };
 
   const handleStartNewGame = (options: NewGameOptions) => {
-    handleConsultControl();
     const newId = `game_${Date.now()}`;
     const freshChess = new Chess();
     setChess(freshChess);
@@ -415,6 +413,7 @@ export function App() {
     setShowLinesMode(options.showLinesMode);
     setMovesList([]);
     setLastMove(null);
+    setCheckmateNotice(null);
     accumulatedClockMsRef.current = 0;
     lastClockTickRef.current = Date.now();
     setWhiteTime(options.timeControlSeconds || 600);
@@ -424,17 +423,6 @@ export function App() {
 
     if (supervisorRef.current) {
       supervisorRef.current.resetForNewGame(newId);
-      supervisorRef.current.onPositionChange({
-        gameId: newId,
-        chess: freshChess,
-        profile,
-        clockRemainingSeconds: options.timeControlSeconds || 600,
-        averageUserMoveTime: 12,
-        games,
-        userColor: options.userColor,
-        gameMode: options.gameMode,
-        showLinesMode: options.showLinesMode,
-      });
     }
   };
 
@@ -512,14 +500,10 @@ export function App() {
         moves: movesList,
       };
 
-      saveGameRecord(newRecord);
+      const updatedProfile = saveGameRecord(newRecord);
       const updatedGames = [newRecord, ...games.filter((g) => g.id !== newRecord.id)];
       setGames(updatedGames);
-
-      // Recalcular perfil con base en el resultado real registrado
-      const updatedProfile = computeProfileFromGames(updatedGames, profile);
       setProfile(updatedProfile);
-      savePlayerProfile(updatedProfile);
 
       controlDirector.recordStockfishAudit({
         gameId: newRecord.id,
@@ -533,7 +517,7 @@ export function App() {
     }
 
     // Iniciar nuevo juego limpio
-    handleConsultControl();
+    setIsFinishModalOpen(false);
     const fresh = new Chess();
     const newId = `game_${Date.now()}`;
     setChess(fresh);
@@ -544,7 +528,9 @@ export function App() {
     setIsClockRunning(false);
     setWhiteTime(600);
     setBlackTime(600);
-    triggerSupervisor(fresh);
+    if (supervisorRef.current) {
+      supervisorRef.current.resetForNewGame(newId);
+    }
   };
 
   const handleFlipBoard = () => {
@@ -695,6 +681,19 @@ export function App() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() =>
+                      handleStartNewGame({
+                        userColor,
+                        gameMode,
+                        timeControlSeconds: whiteTime || 600,
+                        showLinesMode,
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] transition-colors shadow-md"
+                  >
+                    Nueva Partida
+                  </button>
                   <button
                     onClick={() => handleTabChange('history')}
                     className="px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"

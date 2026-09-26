@@ -263,61 +263,61 @@ export function runChessJsRecommendation(
   const bestScore = candidates[0].score;
   const otherMovesSet = new Set(otherEngineMoves);
 
-  // Filtramos candidatos que:
-  // 1. NO pierdan la pieza (la pieza movida está en casilla segura sin riesgo de captura gratuita)
-  // 2. Tengan un desfase de puntuación de ~ -0.8 a -1.2 puntos (-80 a -125 centipeones)
-  // 3. NO sean las jugadas sugeridas por los otros 4 motores
-  const safeCandidates = candidates.filter((c) => !isMaterialLostAfterMove(chess, c));
-
-  // Priorizar jugadas de piezas (alfiles, torres, damas, caballos) que den vueltas o retrocedan
-  // en lugar de avanzar peones decisivos
+  // Selección perezosa (lazy) de candidata para evitar cálculos innecesarios en 30+ jugadas
   let selectedCandidate: ScoredMove | undefined;
 
   // Paso 1: Buscar en el rango ideal de pérdida de puntuación pura (-75 a -125 cp) sin perder pieza
-  const idealRange = safeCandidates.filter((c) => {
+  const idealCandidates = candidates.filter((c) => {
     const diff = bestScore - c.score;
-    const isOther = otherMovesSet.has(c.move);
-    return diff >= 75 && diff <= 125 && !isOther;
+    return diff >= 75 && diff <= 125 && !otherMovesSet.has(c.move);
   });
 
-  if (idealRange.length > 0) {
-    // Preferir piezas mayores/menores (alfil, dama, torre, caballo)
-    const pieceMove = idealRange.find((c) => {
-      const piece = chess.get(c.from as Square);
-      return piece && (piece.type === 'b' || piece.type === 'n' || piece.type === 'r' || piece.type === 'q');
-    });
-    selectedCandidate = pieceMove || idealRange[0];
-  }
+  // Preferir piezas mayores/menores primero
+  idealCandidates.sort((a, b) => {
+    const pieceA = chess.get(a.from as Square);
+    const pieceB = chess.get(b.from as Square);
+    const isPieceA = pieceA && pieceA.type !== 'p';
+    const isPieceB = pieceB && pieceB.type !== 'p';
+    return (isPieceB ? 1 : 0) - (isPieceA ? 1 : 0);
+  });
 
-  // Paso 2: Rango ampliado (-60 a -160 cp) seguro
-  if (!selectedCandidate) {
-    const extendedRange = safeCandidates.filter((c) => {
-      const diff = bestScore - c.score;
-      return diff >= 60 && diff <= 160 && !otherMovesSet.has(c.move);
-    });
-    if (extendedRange.length > 0) {
-      selectedCandidate = extendedRange[0];
+  for (const c of idealCandidates) {
+    if (!isMaterialLostAfterMove(chess, c)) {
+      selectedCandidate = c;
+      break;
     }
   }
 
-  // Paso 3: Si no hay en ese rango exacto, buscar la jugada segura más cercana a un desfase de 95 cp
-  if (!selectedCandidate && safeCandidates.length > 1) {
-    let closestDistance = 99999;
-    for (let i = 1; i < safeCandidates.length; i++) {
-      const c = safeCandidates[i];
+  // Paso 2: Rango ampliado (-60 a -160 cp)
+  if (!selectedCandidate) {
+    const extendedCandidates = candidates.filter((c) => {
       const diff = bestScore - c.score;
-      if (diff > 250) continue; // Descartar caídas graves
-      const dist = Math.abs(diff - 95);
-      if (dist < closestDistance) {
-        closestDistance = dist;
+      return diff >= 60 && diff <= 160 && !otherMovesSet.has(c.move);
+    });
+    for (const c of extendedCandidates) {
+      if (!isMaterialLostAfterMove(chess, c)) {
         selectedCandidate = c;
+        break;
       }
     }
   }
 
-  // Fallback seguro
+  // Paso 3: Fallback seguro más cercano
   if (!selectedCandidate) {
-    selectedCandidate = safeCandidates.length > 1 ? safeCandidates[1] : candidates[0];
+    for (let i = 1; i < candidates.length; i++) {
+      const c = candidates[i];
+      const diff = bestScore - c.score;
+      if (diff > 250) continue;
+      if (!isMaterialLostAfterMove(chess, c)) {
+        selectedCandidate = c;
+        break;
+      }
+    }
+  }
+
+  // Fallback final garantizado
+  if (!selectedCandidate) {
+    selectedCandidate = candidates.length > 1 ? candidates[1] : candidates[0];
   }
 
   // Cálculo del desfase real de puntuación

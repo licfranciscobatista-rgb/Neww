@@ -150,7 +150,7 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
             <button
               type="button"
               onClick={() => onToggleEngineFilter('chessjs')}
-              title={`Chess.js: ${recommendations.chessjs.simpleMoveText || `${recommendations.chessjs.avoidPieceName || 'Pieza'} a ${recommendations.chessjs.to || recommendations.chessjs.san}`}. Toca para proyectar en el tablero.`}
+              title={`Mala jugada: ${recommendations.chessjs.simpleMoveText || `${recommendations.chessjs.avoidPieceName || 'Pieza'} a ${recommendations.chessjs.to || recommendations.chessjs.san}`}. Toca para ver en el tablero.`}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all ${
                 activeArrowFilter.chessjs
                   ? 'bg-rose-950/80 border-rose-500 text-rose-200 shadow-sm ring-1 ring-rose-500/40'

@@ -139,13 +139,39 @@ export function computeProfileFromGames(games: GameRecord[], baseProfile: Player
   };
 }
 
+// En-memoria caché de alto rendimiento para tablets con 20+ partidas
+let inMemoryProfileCache: PlayerProfile | null = null;
+let inMemoryGamesCache: GameRecord[] | null = null;
+let inMemoryGamesHash = '';
+
 export function loadPlayerProfile(): PlayerProfile {
   try {
-    const raw = localStorage.getItem(PROFILE_KEY);
     const games = loadGameHistory();
+    const currentHash = `${games.length}_${games[0]?.id || ''}`;
+
+    if (inMemoryProfileCache && inMemoryGamesHash === currentHash) {
+      return inMemoryProfileCache;
+    }
+
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Si el perfil guardado ya corresponde al número exacto de partidas jugadas, se usa de inmediato (<0.1ms)
+      if (parsed && typeof parsed.gamesPlayed === 'number' && parsed.gamesPlayed === games.length) {
+        const cached: PlayerProfile = { ...DEFAULT_PROFILE, ...parsed };
+        inMemoryProfileCache = cached;
+        inMemoryGamesHash = currentHash;
+        return cached;
+      }
+    }
+
     const base: PlayerProfile = raw ? { ...DEFAULT_PROFILE, ...JSON.parse(raw) } : { ...DEFAULT_PROFILE };
-    // Always compute strictly from actual games
-    return computeProfileFromGames(games, base);
+    // Solo computar si no existe perfil o si cambió el número de partidas
+    const computed = computeProfileFromGames(games, base);
+    inMemoryProfileCache = computed;
+    inMemoryGamesHash = currentHash;
+    savePlayerProfile(computed);
+    return computed;
   } catch {
     return DEFAULT_PROFILE;
   }
@@ -153,6 +179,7 @@ export function loadPlayerProfile(): PlayerProfile {
 
 export function savePlayerProfile(profile: PlayerProfile): void {
   try {
+    inMemoryProfileCache = profile;
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   } catch (e) {
     console.error('Error saving profile', e);
@@ -163,37 +190,66 @@ export const loadProfile = loadPlayerProfile;
 export const saveProfile = savePlayerProfile;
 
 export function resetPlayerProfile(): PlayerProfile {
+  inMemoryProfileCache = DEFAULT_PROFILE;
+  inMemoryGamesCache = [];
+  inMemoryGamesHash = '';
   savePlayerProfile(DEFAULT_PROFILE);
   return DEFAULT_PROFILE;
 }
 
 export function loadGameHistory(): GameRecord[] {
+  if (inMemoryGamesCache !== null) {
+    return inMemoryGamesCache;
+  }
   try {
     const raw = localStorage.getItem(GAMES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      inMemoryGamesCache = [];
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    inMemoryGamesCache = Array.isArray(parsed) ? parsed : [];
+    return inMemoryGamesCache;
   } catch {
+    inMemoryGamesCache = [];
     return [];
   }
 }
 
 export const loadGameRecords = loadGameHistory;
 
-export function saveGameRecord(record: GameRecord): void {
+export function saveGameRecord(record: GameRecord): PlayerProfile {
   try {
-    // Invalida inmediatamente el caché de destilación para forzar recálculo puro
-    HistoryAssistant.clearCache();
+    // Compactar movimientos para no saturar memoria ni localStorage en tablets
+    const compactRecord: GameRecord = {
+      ...record,
+      moves: (record.moves || []).map((m, idx) => ({
+        ply: m.ply || idx + 1,
+        moveNumber: m.moveNumber || Math.floor(idx / 2) + 1,
+        san: m.san,
+        from: m.from,
+        to: m.to,
+        uci: m.uci || `${m.from}${m.to}`,
+        source: m.source || 'MANUAL',
+        thinkTime: m.thinkTime || 10,
+        timestamp: m.timestamp || Date.now(),
+      })),
+    };
 
     const games = loadGameHistory();
-    const updated = [record, ...games.filter((g) => g.id !== record.id)];
-    localStorage.setItem(GAMES_KEY, JSON.stringify(updated.slice(0, 100)));
+    const updated = [compactRecord, ...games.filter((g) => g.id !== record.id)];
+    inMemoryGamesCache = updated.slice(0, 100);
+    localStorage.setItem(GAMES_KEY, JSON.stringify(inMemoryGamesCache));
 
-    // Immediately recompute and save player profile strictly from updated games
-    const currentProfile = loadPlayerProfile();
-    const recomputed = computeProfileFromGames(updated, currentProfile);
+    // Recompute profile once with updated games
+    const baseProfile = inMemoryProfileCache || DEFAULT_PROFILE;
+    const recomputed = computeProfileFromGames(updated, baseProfile);
+    inMemoryGamesHash = `${updated.length}_${record.id}`;
     savePlayerProfile(recomputed);
+    return recomputed;
   } catch (e) {
     console.error('Error saving game record', e);
+    return inMemoryProfileCache || DEFAULT_PROFILE;
   }
 }
 
@@ -202,11 +258,12 @@ export function deleteGameRecord(id: string): void {
     HistoryAssistant.clearCache();
     const games = loadGameHistory();
     const updated = games.filter((g) => g.id !== id);
+    inMemoryGamesCache = updated;
     localStorage.setItem(GAMES_KEY, JSON.stringify(updated));
 
-    // Recompute profile after deletion
-    const currentProfile = loadPlayerProfile();
-    const recomputed = computeProfileFromGames(updated, currentProfile);
+    const baseProfile = inMemoryProfileCache || DEFAULT_PROFILE;
+    const recomputed = computeProfileFromGames(updated, baseProfile);
+    inMemoryGamesHash = `${updated.length}_${updated[0]?.id || ''}`;
     savePlayerProfile(recomputed);
   } catch (e) {
     console.error('Error deleting game record', e);
