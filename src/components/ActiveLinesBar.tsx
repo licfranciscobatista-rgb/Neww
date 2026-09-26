@@ -171,6 +171,40 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
               </span>
             </button>
           )}
+
+          {recommendations.garbo?.san && (() => {
+            const conf = ENGINE_CONFIG.garbo;
+            const isActive = activeArrowFilter.garbo;
+            return (
+              <button
+                type="button"
+                onClick={() => onToggleEngineFilter('garbo')}
+                title={`Alternar flecha de GarboChess: ${recommendations.garbo?.san}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                  isActive
+                    ? 'shadow-sm ring-1 ring-emerald-500/40'
+                    : 'opacity-70 border-emerald-900/60 bg-emerald-950/25 text-emerald-300 hover:border-emerald-700/70 hover:text-white'
+                }`}
+                style={{
+                  backgroundColor: isActive ? conf.badgeBg : undefined,
+                  borderColor: isActive ? conf.badgeBorder : undefined,
+                  color: isActive ? '#ffffff' : undefined,
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: conf.stroke }}
+                />
+                <span>GB</span>
+                <span className="hidden sm:inline text-[10px] font-medium opacity-90">
+                  GarboChess
+                </span>
+                <span className="text-[10px] opacity-90 font-mono bg-black/30 px-1 py-0.2 rounded">
+                  {recommendations.garbo.san}
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>
