@@ -20,6 +20,7 @@ import {
   MoveSource,
   PlayerProfile,
   EngineType,
+  StockfishOperatingMode,
 } from './types/chess';
 import {
   loadPlayerProfile,
@@ -399,8 +400,18 @@ export function App() {
       chessjs: 'CHESSJS_ASSISTED',
     };
 
+    if (engineKey === 'stockfish' && supervisorState.stockfishMode === 'per_request') {
+      supervisorRef.current?.deductStockfishUse();
+    }
+
     executeMove(from, to, sourceMap[engineKey], moveUci.length > 4 ? moveUci[4] : undefined);
   };
+
+  const handleChangeStockfishMode = useCallback((mode: StockfishOperatingMode) => {
+    if (supervisorRef.current) {
+      supervisorRef.current.setStockfishMode(mode, chess);
+    }
+  }, [chess]);
 
   const handleStartNewGame = (options: NewGameOptions) => {
     const newId = `game_${Date.now()}`;
@@ -422,6 +433,7 @@ export function App() {
     setIsNewGameModalOpen(false);
 
     if (supervisorRef.current) {
+      supervisorRef.current.setStockfishMode(options.stockfishMode, freshChess);
       supervisorRef.current.resetForNewGame(newId);
     }
   };
@@ -688,6 +700,7 @@ export function App() {
                         gameMode,
                         timeControlSeconds: whiteTime || 600,
                         showLinesMode,
+                        stockfishMode: supervisorState.stockfishMode,
                       })
                     }
                     className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] transition-colors shadow-md"
@@ -814,6 +827,8 @@ export function App() {
                   loadingStates={supervisorState.loadingStates}
                   stockfishRemainingUses={supervisorState.stockfishRemainingUses}
                   garboRemainingUses={supervisorState.garboRemainingUses}
+                  stockfishMode={supervisorState.stockfishMode}
+                  onChangeStockfishMode={handleChangeStockfishMode}
                   personalEngineUnlocked={supervisorState.personalEngineUnlocked}
                   personalProgress={supervisorState.personalProgress}
                   maiaElo={profile.maiaEloCalibration || 1100}

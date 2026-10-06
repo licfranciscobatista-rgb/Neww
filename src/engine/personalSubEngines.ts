@@ -82,8 +82,8 @@ export class PlayerGraphSubEngine {
       (userColor === 'w' && result === '0-1') ||
       (userColor === 'b' && result === '1-0');
 
-    // Limitar a los primeros 12 plies (apertura e inicio medio juego) para 100% fluidez en tablets
-    const maxPlies = Math.min(12, game.moves.length);
+    // Indexar hasta 100 plies (apertura, medio juego y finales) de cada partida del usuario
+    const maxPlies = Math.min(100, game.moves.length);
     for (let i = 0; i < maxPlies; i++) {
       const m = game.moves[i];
       if (!m) continue;
@@ -232,6 +232,7 @@ export class StyleSubEngine {
     const isTactical = distilled.aggressionScore > 55;
     const isProphylactic = distilled.patienceScore > 55;
     const styleProfile = StyleAssistant.getStyleProfile(distilled);
+    const piecePref = distilled.piecePreference || { knightsCount: 0, bishopsCount: 0, rooksCount: 0 };
 
     for (const m of legalMoves) {
       let score = 50;
@@ -239,16 +240,40 @@ export class StyleSubEngine {
 
       const isCapture = m.san.includes('x');
       const givesCheck = m.san.includes('+');
+      const isCastle = m.san === 'O-O' || m.san === 'O-O-O';
       const isCenter = ['e4', 'd4', 'e5', 'd5', 'c4', 'c5', 'Nf3', 'Nc3', 'Nf6', 'Nc6'].some((sq) =>
         m.san.includes(sq)
       );
 
-      if (isTactical && (isCapture || givesCheck)) {
-        score += 25;
-        reason = `Alineada con tu biotipo agresivo/táctico (${distilled.aggressionScore}% de iniciativa).`;
-      } else if (isProphylactic && ['h3', 'h6', 'a3', 'a6', 'Kh1', 'Kh8'].includes(m.san)) {
+      // Afinidad de pieza específica del jugador (Caballo vs Alfil vs Torre)
+      if (m.piece === 'n' && piecePref.knightsCount >= piecePref.bishopsCount && piecePref.knightsCount > 0) {
+        score += 24;
+        reason = `Afinidad por actividad de caballo (+Caballos en tus ${distilled.manualGamesCount} partidas).`;
+      } else if (m.piece === 'b' && piecePref.bishopsCount > piecePref.knightsCount) {
+        score += 24;
+        reason = `Afinidad por diagonales de alfil (+Alfiles en tu historial).`;
+      } else if (m.piece === 'r' && piecePref.rooksCount > 8) {
         score += 20;
-        reason = `Alineada con tu paciencia posicional y profilaxis (${distilled.patienceScore}%).`;
+        reason = `Activación de torre según tu historial de columnas abiertas.`;
+      }
+
+      // Enroque preferido
+      if (isCastle) {
+        if (m.san === 'O-O' && distilled.castlingPreference === 'kingside') {
+          score += 26;
+          reason = 'Enroque corto: tu refugio rey habitual en partidas previas.';
+        } else if (m.san === 'O-O-O' && distilled.castlingPreference === 'queenside') {
+          score += 26;
+          reason = 'Enroque largo: tu flanco de enroque preferido en tu biotipo.';
+        }
+      }
+
+      if (isTactical && (isCapture || givesCheck)) {
+        score += 22;
+        reason = `Alineada con tu biotipo agresivo/táctico (${distilled.aggressionScore}% de iniciativa).`;
+      } else if (isProphylactic && ['h3', 'h6', 'a3', 'a6', 'Kh1', 'Kh8', 'g3', 'g6'].includes(m.san)) {
+        score += 25;
+        reason = `Profilaxis característica de tu estilo paciente (${distilled.patienceScore}% de paciencia posicional).`;
       } else if (isCenter) {
         score += 15;
         reason = 'Ocupación o presión de casillas centrales.';
@@ -264,10 +289,10 @@ export class StyleSubEngine {
       name: 'Sub-Motor 2: Afinidad de Estilo',
       focus: 'Perfil y Dinamismo Posicional',
       score: favoredMoves[0]?.score || 50,
-      weight: 0.2,
-      favoredMoves: favoredMoves.slice(0, 3),
+      weight: 0.25,
+      favoredMoves: favoredMoves.slice(0, 5),
       vetoMoves: [],
-      statusSummary: `Biotipo: ${styleProfile.archetype} (Agresividad: ${distilled.aggressionScore}%).`,
+      statusSummary: `Biotipo: ${styleProfile.archetype} (Agresividad: ${distilled.aggressionScore}%, Paciencia: ${distilled.patienceScore}%).`,
       isCalibrated: gamesCount >= 10,
     };
   }

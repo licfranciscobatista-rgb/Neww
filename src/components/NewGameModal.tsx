@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Clock, Bot, User, Shuffle, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { X, Play, Clock, Bot, User, Shuffle, ShieldCheck, CheckCircle2, Cpu } from 'lucide-react';
 import { subDirectorAuditor, SubDirectorPreflightResult } from '../engine/director/subDirectorEngineAuditor';
+import { StockfishOperatingMode } from '../types/chess';
 
 export type ShowLinesMode = 'my_turn_only' | 'both_turns' | 'none';
 
@@ -9,6 +10,7 @@ export interface NewGameOptions {
   gameMode: 'vs_ai' | 'manual_board';
   timeControlSeconds: number;
   showLinesMode: ShowLinesMode;
+  stockfishMode: StockfishOperatingMode;
 }
 
 interface NewGameModalProps {
@@ -26,6 +28,12 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
   const [selectedMode, setSelectedMode] = useState<'vs_ai' | 'manual_board'>('vs_ai');
   const [selectedTime, setSelectedTime] = useState<number>(600);
   const [selectedLinesMode, setSelectedLinesMode] = useState<ShowLinesMode>('my_turn_only');
+  const [selectedStockfishMode, setSelectedStockfishMode] = useState<StockfishOperatingMode>(() => {
+    if (typeof localStorage !== 'undefined') {
+      return (localStorage.getItem('jugada_sf_mode') as StockfishOperatingMode) || 'per_request';
+    }
+    return 'per_request';
+  });
   const [preflight, setPreflight] = useState<SubDirectorPreflightResult | null>(null);
 
   useEffect(() => {
@@ -45,6 +53,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
       gameMode: selectedMode,
       timeControlSeconds: selectedTime,
       showLinesMode: selectedLinesMode,
+      stockfishMode: selectedStockfishMode,
     });
   };
 
@@ -250,6 +259,60 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
               <span className="text-xs font-bold text-amber-400">Sin líneas</span>
               <span className="text-[10px] text-slate-400 mt-1 leading-tight">
                 Tablero limpio sin flechas de ayuda.
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modo de Stockfish 19 */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+            <span>5. Modo de Stockfish 19</span>
+            <Cpu className="w-3.5 h-3.5 text-blue-400" />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setSelectedStockfishMode('always_active')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedStockfishMode === 'always_active'
+                  ? 'bg-blue-500/10 border-blue-400 ring-1 ring-blue-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-blue-400">Toda la partida</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                Stockfish analiza y sugiere en cada turno sin límite de usos.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedStockfishMode('per_request')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedStockfishMode === 'per_request'
+                  ? 'bg-sky-500/10 border-sky-400 ring-1 ring-sky-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-sky-400">Bajo demanda (3 usos)</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                Topado a 3 consultas por partida. Se descuenta al solicitar ayuda.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedStockfishMode('off')}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                selectedStockfishMode === 'off'
+                  ? 'bg-red-500/10 border-red-400 ring-1 ring-red-400 text-white font-bold'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <span className="text-xs font-bold text-red-400">Apagado</span>
+              <span className="text-[10px] text-slate-400 mt-1 leading-tight">
+                Stockfish apagado. Juega con tu Motor Personal y Maia/Garbo.
               </span>
             </button>
           </div>

@@ -11,7 +11,7 @@ import {
   Play,
   Lock,
 } from 'lucide-react';
-import { EngineRecommendation, EngineType } from '../types/chess';
+import { EngineRecommendation, EngineType, StockfishOperatingMode } from '../types/chess';
 import { getDirectMoveInstruction } from '../utils/moveInstruction';
 
 interface EngineCardsProps {
@@ -20,6 +20,8 @@ interface EngineCardsProps {
   loadingStates: Record<EngineType, boolean>;
   stockfishRemainingUses: number;
   garboRemainingUses: number;
+  stockfishMode?: StockfishOperatingMode;
+  onChangeStockfishMode?: (mode: StockfishOperatingMode) => void;
   personalEngineUnlocked?: boolean;
   personalProgress?: string;
   maiaElo?: number;
@@ -39,6 +41,8 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   loadingStates,
   stockfishRemainingUses,
   garboRemainingUses,
+  stockfishMode = 'per_request',
+  onChangeStockfishMode,
   personalEngineUnlocked = false,
   personalProgress = '0 / 10 partidas',
   maiaElo = 1100,
@@ -161,6 +165,27 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         )}
 
+        {/* Contraste del Motor Personal frente a Stockfish (Anti-Copia / Anti-Mirroring) */}
+        {engineKey === 'personal' && rec.stockfishContrast && (
+          <div className={`rounded-lg px-2.5 py-1.5 border text-[10px] space-y-1 ${
+            rec.stockfishContrast.isDifferentFromStockfish
+              ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+              : 'bg-blue-950/40 border-blue-600/30 text-blue-200'
+          }`}>
+            <div className="flex items-center justify-between font-bold">
+              <span className="flex items-center gap-1">
+                {rec.stockfishContrast.isDifferentFromStockfish ? '⚡ Soberano / Diferenciado' : '🤝 Convergencia Táctica'}
+              </span>
+              <span className="text-[9px] font-mono text-slate-400">
+                {rec.stockfishContrast.stockfishSan ? `SF: ${rec.stockfishContrast.stockfishSan}` : 'SF Inactivo'}
+              </span>
+            </div>
+            <p className="text-[9.5px] leading-tight text-slate-300">
+              {rec.stockfishContrast.contrastReason}
+            </p>
+          </div>
+        )}
+
         <p className="text-[11px] text-slate-300 leading-snug px-0.5">
           {rec.explanation || instr.tacticalIntent}
         </p>
@@ -189,7 +214,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         {/* Stockfish 19 */}
         <div className="bg-slate-900/90 border border-blue-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-blue-500/60">
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <Cpu className="w-4 h-4" />
@@ -201,15 +226,26 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    stockfishRemainingUses > 0
-                      ? 'bg-blue-950/60 text-blue-300 border-blue-600/40'
-                      : 'bg-red-950/60 text-red-300 border-red-700/50'
-                  }`}
-                >
-                  {stockfishRemainingUses}/3 usos
-                </span>
+                {stockfishMode === 'always_active' ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/60 text-blue-300 border-blue-600/40">
+                    Toda la partida
+                  </span>
+                ) : stockfishMode === 'off' ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-red-950/60 text-red-300 border-red-700/50">
+                    Apagado
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      stockfishRemainingUses > 0
+                        ? 'bg-sky-950/60 text-sky-300 border-sky-600/40'
+                        : 'bg-red-950/60 text-red-300 border-red-700/50'
+                    }`}
+                  >
+                    {stockfishRemainingUses}/3 usos
+                  </span>
+                )}
+
                 <button
                   onClick={() => onToggleArrow('stockfish')}
                   className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
@@ -222,20 +258,100 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
               </div>
             </div>
 
-            {renderMoveBox(
-              sfRec,
-              loadingStates.stockfish,
-              'Calculando jugada objetiva...',
-              'stockfish',
-              stockfishRemainingUses,
-              onRequestStockfish,
-              'Tiempo máx 15s'
+            {/* Selector interactivo de Modo de Stockfish en vivo */}
+            <div className="flex items-center gap-1 my-2 p-1 bg-slate-950/80 rounded-lg border border-slate-800 text-[10px]">
+              <button
+                type="button"
+                onClick={() => onChangeStockfishMode?.('always_active')}
+                className={`flex-1 py-1 px-1.5 rounded font-bold transition-all text-center ${
+                  stockfishMode === 'always_active'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+                title="Stockfish activo en cada jugada de la partida"
+              >
+                Toda la partida
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeStockfishMode?.('per_request')}
+                className={`flex-1 py-1 px-1.5 rounded font-bold transition-all text-center ${
+                  stockfishMode === 'per_request'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+                title="3 consultas por partida con descuento real"
+              >
+                3 Usos
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeStockfishMode?.('off')}
+                className={`flex-1 py-1 px-1.5 rounded font-bold transition-all text-center ${
+                  stockfishMode === 'off'
+                    ? 'bg-red-700 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+                title="Desactivar Stockfish para no interferir"
+              >
+                Apagado
+              </button>
+            </div>
+
+            {stockfishMode === 'off' ? (
+              <div className="text-center py-4 space-y-2 bg-slate-950/40 rounded-xl border border-dashed border-red-900/40 my-1">
+                <div className="flex items-center justify-center gap-1.5 text-red-400 font-bold text-xs">
+                  <span>🔴 Stockfish Apagado</span>
+                </div>
+                <p className="text-[11px] text-slate-400 px-2 leading-relaxed">
+                  Has apagado Stockfish. No consume recursos ni muestra flechas en el tablero. Tu Motor Personal y Maia/Garbo operan sin interferencias.
+                </p>
+                {onChangeStockfishMode && (
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      onClick={() => onChangeStockfishMode('always_active')}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold transition-all"
+                    >
+                      Encender (Toda la partida)
+                    </button>
+                    <button
+                      onClick={() => onChangeStockfishMode('per_request')}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded text-[10px] font-bold border border-slate-700 transition-all"
+                    >
+                      Encender (3 Usos)
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : stockfishMode === 'always_active' ? (
+              renderMoveBox(
+                sfRec,
+                loadingStates.stockfish,
+                'Calculando jugada objetiva...',
+                'stockfish'
+              )
+            ) : (
+              renderMoveBox(
+                sfRec,
+                loadingStates.stockfish,
+                'Calculando jugada objetiva...',
+                'stockfish',
+                stockfishRemainingUses,
+                onRequestStockfish,
+                'Tiempo máx 15s'
+              )
             )}
           </div>
 
           <div className="pt-2 mt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Evaluación: {sfRec?.evalDisplay || 'Bajo demanda'}</span>
-            <span className="font-mono text-blue-400 font-bold">Topado a 3 usos</span>
+            <span>Evaluación: {stockfishMode === 'off' ? 'Apagado' : sfRec?.evalDisplay || 'Bajo demanda'}</span>
+            <span className="font-mono text-blue-400 font-bold">
+              {stockfishMode === 'always_active'
+                ? 'Continuo (Toda la partida)'
+                : stockfishMode === 'off'
+                ? 'Motor Apagado'
+                : `${stockfishRemainingUses} usos restantes`}
+            </span>
           </div>
         </div>
 
@@ -442,7 +558,9 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                     : 'Calibración en segundo plano'}
                 </span>
                 <span className="font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40 shrink-0">
-                  {personalEngineUnlocked ? 'Soberano (100%)' : `${cleanProgress} partidas`}
+                  {personalEngineUnlocked
+                    ? (parseInt(cleanProgress, 10) >= 10 ? 'Soberano (100%)' : `Calibrando (${cleanProgress}/10)`)
+                    : `${cleanProgress} partidas`}
                 </span>
               </div>
             </div>

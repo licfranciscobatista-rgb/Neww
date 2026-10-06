@@ -8,7 +8,7 @@ import {
   GameRecord,
 } from '../types/chess';
 import { calculatePositionFingerprint } from './fingerprint';
-import { lookupTheory } from './theoryBook';
+import { lookupTheory, distillBookMove } from './theoryBook';
 import {
   HistoryAssistant,
   StyleAssistant,
@@ -205,7 +205,8 @@ export function getPersonalEngineStatus(
 
     const effectiveGames = Math.max(profile.gamesPlayed, distilled.manualGamesCount);
     const requiredGames = 10;
-    const isUnlocked = effectiveGames >= requiredGames;
+    const isUnlocked = effectiveGames >= 1;
+    const isFullyCalibrated = effectiveGames >= requiredGames;
     const progressPercent = Math.min(100, Math.round((effectiveGames / requiredGames) * 100));
 
     let subEngineReport: PersonalAuditReport | undefined;
@@ -214,12 +215,12 @@ export function getPersonalEngineStatus(
     }
 
     let statusMessage = '';
-    if (isUnlocked) {
-      statusMessage = `Motor Personal Calibrado al 100%: ADN propio consolidado con ${effectiveGames} partidas (${(distilled.distilledBytes / 1024).toFixed(1)} KB destilados de ${Math.round(distilled.rawPgnBytes / 1024)} KB brutos).`;
+    if (isFullyCalibrated) {
+      statusMessage = `Motor Personal Soberano (100% Calibrado): ADN propio consolidado con ${effectiveGames} partidas (${(distilled.distilledBytes / 1024).toFixed(1)} KB destilados de ${Math.round(distilled.rawPgnBytes / 1024)} KB brutos).`;
     } else if (effectiveGames > 0) {
-      statusMessage = `Sub-Motores en Calibración Activa (${effectiveGames}/${requiredGames} partidas): Mapeando árbol posicional y afinidad (${progressPercent}% completado). Requiere 10 partidas para sugerir en tablero.`;
+      statusMessage = `Calibración Progresiva (${effectiveGames}/${requiredGames} partidas): Aprendiendo de tu estilo activo en tiempo real (${progressPercent}% completado).`;
     } else {
-      statusMessage = `Motor Personal Bloqueado (0/${requiredGames}): Requiere 10 partidas jugadas por ti para calibrar tu árbol de decisiones y biotipo propio.`;
+      statusMessage = `Motor Personal en Espera (0/${requiredGames}): Juega tu primera partida para comenzar a calibrar tu biotipo.`;
     }
 
     const result: PersonalEngineStatus = {
@@ -261,6 +262,8 @@ export interface PersonalRecommendationParams {
   chess: Chess;
   profile: PlayerProfile;
   games?: GameRecord[];
+  timeRemainingSeconds?: number | null;
+  stockfishMoveSan?: string;
 }
 
 /**
@@ -273,7 +276,7 @@ export interface PersonalRecommendationParams {
 export function runPersonalRecommendation(
   params: PersonalRecommendationParams
 ): EngineRecommendation | null {
-  const { chess, profile, games, timeRemainingSeconds = null } = params as any;
+  const { chess, profile, games, timeRemainingSeconds = null, stockfishMoveSan = undefined } = params as any;
 
   if (!chess) return null;
 
@@ -291,18 +294,28 @@ export function runPersonalRecommendation(
 
     const distilled = status.distilledData;
 
-    // Ejecución única de los 8 Sub-Motores autónomos
+    // Detección estricta de Libro vs Fuera de Libro en la posición actual
+    const currentHistory = chess.history();
+    const positionTheory = lookupTheory(currentHistory);
+    const isOutOfBook = !positionTheory.isBook;
+
+    // Ejecución de los 8 Sub-Motores autónomos
     const auditReport = runSubEngineAudit(chess, distilled, storedGames, timeRemainingSeconds);
     const verdicts = auditReport.subEngineVerdicts;
+    const styleProfile = StyleAssistant.getStyleProfile(distilled);
 
     // 1. Filtro de vetos del Sub-Motor 4 (Blunder Shield)
     const vetoedSan = new Set(verdicts.blunder_shield.vetoMoves.map((v) => v.san));
-
-    let bestMove = legalMoves[0];
-    let highestCompositeScore = -999;
-    let selectedRationale = '';
-
     const graphFavored = verdicts.graph.favoredMoves;
+
+    const scoredCandidates: Array<{
+      move: any;
+      score: number;
+      rationale: string;
+      isAuthenticPersonalMatch: boolean;
+      isBookMove: boolean;
+      bookOpeningName?: string;
+    }> = [];
 
     for (const m of legalMoves) {
       // Si la jugada está vetada por riesgo táctico de colgada, descartar
@@ -310,47 +323,140 @@ export function runPersonalRecommendation(
         continue;
       }
 
+      const moveDistill = distillBookMove(chess, m.san);
+      const isCandidateBook = !isOutOfBook && moveDistill.isBook;
+
       let compositeScore = 50;
       let moveRationale = '';
+      let isAuthenticPersonalMatch = false;
 
       // Aporte Sub-Motor 1 (Grafo Posicional): Si el usuario ya la jugó en esta misma posición
       const inGraph = graphFavored.find((g) => g.san === m.san);
       if (inGraph) {
-        compositeScore += inGraph.score * 0.4;
+        compositeScore += inGraph.score * 0.45;
         moveRationale = inGraph.rationale;
+        isAuthenticPersonalMatch = true;
       }
 
       // Aporte Sub-Motor 2 (Estilo & Biotipo)
       const inStyle = verdicts.style.favoredMoves.find((s) => s.san === m.san);
       if (inStyle) {
-        compositeScore += inStyle.score * 0.25;
+        compositeScore += inStyle.score * 0.35;
         if (!moveRationale) moveRationale = inStyle.rationale;
+        if (inStyle.score > 60) isAuthenticPersonalMatch = true;
       }
 
       // Aporte Sub-Motor 3 (Repertorio)
       const inRep = verdicts.repertoire.favoredMoves.find((r) => r.san === m.san);
       if (inRep) {
-        compositeScore += inRep.score * 0.2;
+        compositeScore += inRep.score * 0.3;
         if (!moveRationale) moveRationale = inRep.rationale;
+        isAuthenticPersonalMatch = true;
       }
 
-      // Aporte Sub-Motor 6 (Táctica)
+      // Aporte de afinidad de piezas del jugador (Caballo vs Alfil vs Torre)
+      const piecePref = distilled.piecePreference;
+      if (m.piece === 'n' && piecePref.knightsCount >= piecePref.bishopsCount && piecePref.knightsCount > 0) {
+        compositeScore += 16;
+        if (!moveRationale) moveRationale = 'Preferencia por maniobras de caballo (+Caballos en tu historial).';
+        isAuthenticPersonalMatch = true;
+      } else if (m.piece === 'b' && piecePref.bishopsCount > piecePref.knightsCount) {
+        compositeScore += 16;
+        if (!moveRationale) moveRationale = 'Preferencia por diagonales de alfil (+Alfiles en tu historial).';
+        isAuthenticPersonalMatch = true;
+      }
+
+      // Aporte de enroque preferido en tu biotipo
+      if (m.san === 'O-O' && distilled.castlingPreference === 'kingside') {
+        compositeScore += 18;
+        if (!moveRationale) moveRationale = 'Enroque corto preferente en tu biotipo de partidas.';
+        isAuthenticPersonalMatch = true;
+      } else if (m.san === 'O-O-O' && distilled.castlingPreference === 'queenside') {
+        compositeScore += 18;
+        if (!moveRationale) moveRationale = 'Enroque largo preferente en tu biotipo de partidas.';
+        isAuthenticPersonalMatch = true;
+      }
+
+      // Aporte Sub-Motor 6 (Táctica / Iniciativa)
       const inTactics = verdicts.tactics.favoredMoves.find((t) => t.san === m.san);
-      if (inTactics) {
-        compositeScore += inTactics.score * 0.15;
+      if (inTactics && distilled.aggressionScore > 50) {
+        compositeScore += inTactics.score * 0.2;
+        if (!moveRationale) moveRationale = inTactics.rationale;
+        isAuthenticPersonalMatch = true;
       }
 
-      // Aporte Sub-Motor 5 (Profilaxis)
+      // Aporte Sub-Motor 5 (Profilaxis / Paciencia)
       const inProphy = verdicts.prophylaxis.favoredMoves.find((p) => p.san === m.san);
-      if (inProphy) {
-        compositeScore += inProphy.score * 0.1;
+      if (inProphy && distilled.patienceScore > 50) {
+        compositeScore += inProphy.score * 0.22;
+        if (!moveRationale) moveRationale = inProphy.rationale;
+        isAuthenticPersonalMatch = true;
       }
 
-      if (compositeScore > highestCompositeScore) {
-        highestCompositeScore = compositeScore;
-        bestMove = m;
-        selectedRationale = moveRationale || 'Jugada de desarrollo armónico seleccionada por tus sub-motores.';
+      scoredCandidates.push({
+        move: m,
+        score: compositeScore,
+        rationale: moveRationale || (isOutOfBook
+          ? `Línea posicional personalizada (${styleProfile.archetype}).`
+          : `Jugada armónica de repertorio (${positionTheory.openingName}).`),
+        isAuthenticPersonalMatch,
+        isBookMove: isCandidateBook,
+        bookOpeningName: isCandidateBook ? moveDistill.openingName : undefined,
+      });
+    }
+
+    if (scoredCandidates.length === 0) return null;
+
+    scoredCandidates.sort((a, b) => b.score - a.score);
+
+    // --- DETECCIÓN Y DIFERENCIACIÓN FRENTE A STOCKFISH (ANTI-MIRRORING) ---
+    // Si la posición está FUERA DE LIBRO, el Motor Personal rechaza copiar mecánicamente a Stockfish.
+    // Detecta activamente jugadas fuera de libro y da prioridad a opciones auténticas del biotipo del jugador.
+    let chosen = scoredCandidates[0];
+    let isDifferentFromStockfish = false;
+    let contrastReason = '';
+
+    if (stockfishMoveSan) {
+      const stockfishMatchesChosen = chosen.move.san === stockfishMoveSan;
+
+      if (isOutOfBook) {
+        // POSICIÓN FUERA DE LIBRO: Diferenciación activa contra Stockfish
+        if (stockfishMatchesChosen) {
+          // Buscar una variante alternativa auténtica que no cuelgue material
+          const personalAlternative = scoredCandidates.find(
+            (c) => c.move.san !== stockfishMoveSan && !vetoedSan.has(c.move.san) && (chosen.score - c.score) <= 30
+          );
+
+          if (personalAlternative) {
+            // Divergencia soberana intencionada
+            chosen = personalAlternative;
+            isDifferentFromStockfish = true;
+            contrastReason = `⚡ Fuera de libro detectado: Stockfish propone el cálculo de máquina ${stockfishMoveSan}, pero tu Motor Personal elige ${personalAlternative.move.san} guiado por tu estilo (${styleProfile.archetype}) y tus 8 ayudantes.`;
+          } else {
+            // No existe alternativa segura sin perder material: forzada táctica
+            isDifferentFromStockfish = false;
+            contrastReason = `🤝 Fuera de libro detectado: Jugada táctica forzada. Tu instinto y Stockfish convergen en ${chosen.move.san} por necesidad de la posición.`;
+          }
+        } else {
+          isDifferentFromStockfish = true;
+          contrastReason = `⚡ Fuera de libro detectado: Elección soberana del Motor Personal (${chosen.move.san}) con identidad propia vs línea de máquina de Stockfish (${stockfishMoveSan}).`;
+        }
+      } else {
+        // POSICIÓN EN LIBRO DE APERTURAS
+        if (stockfishMatchesChosen) {
+          isDifferentFromStockfish = false;
+          contrastReason = `📖 Jugada de Libro ECO (${positionTheory.openingName}): Ambos convergen en la teoría universal de aperturas.`;
+        } else {
+          isDifferentFromStockfish = true;
+          contrastReason = `📖 Repertorio Personal: Variante propia de apertura (${chosen.move.san}) vs recomendación general (${stockfishMoveSan}).`;
+        }
       }
+    } else {
+      // Stockfish apagado o no consultado este turno
+      isDifferentFromStockfish = true;
+      contrastReason = isOutOfBook
+        ? `🧠 Fuera de libro detectado: Decisión 100% soberana del Motor Personal (${styleProfile.archetype}) con Stockfish inactivo.`
+        : `📖 Jugada teórica de apertura (${positionTheory.openingName}) según tu repertorio.`;
     }
 
     // Auditoría transparente de los 8 sub-motores para visualización
@@ -361,23 +467,32 @@ export function runPersonalRecommendation(
       scoreEffect: `${v.score}/100`,
     }));
 
-    const styleProfile = StyleAssistant.getStyleProfile(distilled);
+    const isChosenBook = !isOutOfBook && chosen.isBookMove;
 
     return {
       engine: 'personal',
       engineName: 'Motor Personal',
-      move: `${bestMove.from}${bestMove.to}`,
-      from: bestMove.from,
-      to: bestMove.to,
-      san: bestMove.san,
-      evaluation: Math.round(Math.min(100, Math.max(10, highestCompositeScore))),
-      evalDisplay: `ADN Propio • ${styleProfile.archetype} (${storedGames.length} partidas)`,
-      confidence: Math.round(Math.min(100, highestCompositeScore)),
-      explanation: selectedRationale,
+      move: `${chosen.move.from}${chosen.move.to}`,
+      from: chosen.move.from,
+      to: chosen.move.to,
+      san: chosen.move.san,
+      evaluation: Math.round(Math.min(100, Math.max(10, chosen.score))),
+      evalDisplay: isChosenBook
+        ? `Libro ECO • ${chosen.bookOpeningName || positionTheory.openingName}`
+        : `ADN Propio • ${styleProfile.archetype} (${storedGames.length} part.)`,
+      confidence: Math.round(Math.min(100, chosen.score)),
+      explanation: chosen.rationale,
       color: '#fbbf24',
-      timeTakenMs: 8,
+      timeTakenMs: 4,
       timestamp: Date.now(),
+      isBookMove: isChosenBook,
+      bookOpeningName: isChosenBook ? (chosen.bookOpeningName || positionTheory.openingName) : undefined,
       assistantVotes,
+      stockfishContrast: {
+        isDifferentFromStockfish,
+        stockfishSan: stockfishMoveSan,
+        contrastReason,
+      },
     };
   } catch (err) {
     console.warn('[PersonalEngine] Recuperación segura automática (Zero-Crash):', err);

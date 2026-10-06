@@ -8,6 +8,8 @@ export type MoveSource =
   | 'PERSONAL_ASSISTED'
   | 'CHESSJS_ASSISTED';
 
+export type StockfishOperatingMode = 'always_active' | 'per_request' | 'off';
+
 export interface EngineRecommendation {
   engine: EngineType;
   engineName: string;
@@ -35,6 +37,11 @@ export interface EngineRecommendation {
   humanProbability?: number;
   timeTakenMs?: number;
   timestamp?: number;
+  stockfishContrast?: {
+    isDifferentFromStockfish: boolean;
+    stockfishSan?: string;
+    contrastReason: string;
+  };
   assistantVotes?: Array<{
     id: string;
     name: string;

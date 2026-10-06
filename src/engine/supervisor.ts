@@ -6,6 +6,7 @@ import {
   PlayerProfile,
   ThinkingTimeEstimate,
   GameRecord,
+  StockfishOperatingMode,
 } from '../types/chess';
 import { evaluateMovesStockfish, runStockfishRecommendation } from './stockfishEngine';
 import { realStockfish } from './realStockfish';
@@ -25,6 +26,7 @@ export interface SupervisorState {
   generation: number;
   fen: string;
   isGameOver: boolean;
+  stockfishMode: StockfishOperatingMode;
   stockfishRemainingUses: number;
   garboRemainingUses: number;
   stockfishRequestedThisTurn: boolean;
@@ -105,12 +107,18 @@ export class ChessSupervisor {
 
   constructor(onStateChange: (state: SupervisorState) => void) {
     this.onStateChange = onStateChange;
+    const initialMode: StockfishOperatingMode =
+      typeof localStorage !== 'undefined'
+        ? (localStorage.getItem('jugada_sf_mode') as StockfishOperatingMode) || 'per_request'
+        : 'per_request';
+
     this.state = {
       gameId: '',
       positionId: '',
       generation: 0,
       fen: '',
       isGameOver: false,
+      stockfishMode: initialMode,
       stockfishRemainingUses: 3,
       garboRemainingUses: 5,
       stockfishRequestedThisTurn: false,
@@ -141,6 +149,81 @@ export class ChessSupervisor {
     return this.state;
   }
 
+  public setStockfishMode(mode: StockfishOperatingMode, chess?: Chess): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('jugada_sf_mode', mode);
+    }
+
+    if (mode === 'off') {
+      this.state = {
+        ...this.state,
+        stockfishMode: 'off',
+        stockfishRequestedThisTurn: false,
+        recommendations: {
+          ...this.state.recommendations,
+          stockfish: null,
+        },
+        candidateArrows: this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF')),
+      };
+      this.onStateChange({ ...this.state });
+      return;
+    }
+
+    if (mode === 'always_active') {
+      let sfRec: EngineRecommendation | null = null;
+      if (chess && !chess.isGameOver()) {
+        const sfStart = performance.now();
+        sfRec = runStockfishRecommendation(chess);
+        controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
+      }
+      const arrows = [...this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF'))];
+      if (sfRec && sfRec.move) {
+        arrows.push({
+          from: sfRec.from,
+          to: sfRec.to,
+          label: `SF • ${sfRec.evalDisplay}`,
+          san: sfRec.san,
+          color: '#2563eb',
+        });
+      }
+      this.state = {
+        ...this.state,
+        stockfishMode: 'always_active',
+        stockfishRequestedThisTurn: true,
+        recommendations: {
+          ...this.state.recommendations,
+          stockfish: sfRec,
+        },
+        candidateArrows: arrows,
+      };
+      this.onStateChange({ ...this.state });
+      return;
+    }
+
+    // per_request: limpiar flecha automática y esperar consulta con descuento real de usos
+    this.state = {
+      ...this.state,
+      stockfishMode: 'per_request',
+      stockfishRequestedThisTurn: false,
+      recommendations: {
+        ...this.state.recommendations,
+        stockfish: null,
+      },
+      candidateArrows: this.state.candidateArrows.filter((a) => !a.label?.startsWith('SF')),
+    };
+    this.onStateChange({ ...this.state });
+  }
+
+  public deductStockfishUse(): void {
+    if (this.state.stockfishMode !== 'per_request') return;
+    const remaining = Math.max(0, this.state.stockfishRemainingUses - 1);
+    this.state = {
+      ...this.state,
+      stockfishRemainingUses: remaining,
+    };
+    this.onStateChange({ ...this.state });
+  }
+
   public shouldSuppressArrows(fen?: string): boolean {
     if (this.lastShowLinesMode === 'none') return true;
     if (this.lastShowLinesMode === 'my_turn_only') {
@@ -163,7 +246,7 @@ export class ChessSupervisor {
       positionId: `${gameId}_0`,
       generation: 0,
       isGameOver: false,
-      stockfishRemainingUses: 3,
+      stockfishRemainingUses: 3, // REINICIADO A 3 USOS PARA LA NUEVA PARTIDA
       garboRemainingUses: 5,
       stockfishRequestedThisTurn: false,
       garboRequestedThisTurn: false,
@@ -318,6 +401,7 @@ export class ChessSupervisor {
       generation,
       fen,
       isGameOver: false,
+      stockfishRequestedThisTurn: false,
       thinkingTime,
       personalEngineUnlocked: personalStatus.isUnlocked,
       personalProgress: `${personalStatus.gamesPlayed} / 10 partidas`,
@@ -328,10 +412,18 @@ export class ChessSupervisor {
     subDirector.scheduleZeroLagFrame(() => {
       if (this.state.generation !== generation || this.state.isGameOver) return;
 
-      // 1. Run Stockfish (Recomendación principal con flechas)
-      const sfStart = performance.now();
-      const stockfishRec = runStockfishRecommendation(chess);
-      controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
+      // 1. Run Stockfish según el modo elegido por el usuario ('always_active' | 'per_request' | 'off')
+      let stockfishRec: EngineRecommendation | null = null;
+      if (this.state.stockfishMode === 'always_active') {
+        const sfStart = performance.now();
+        stockfishRec = runStockfishRecommendation(chess);
+        controlDirector.watchEngineExecution('stockfish', performance.now() - sfStart);
+      } else if (this.state.stockfishMode === 'per_request' && this.state.stockfishRequestedThisTurn) {
+        stockfishRec = this.state.recommendations.stockfish;
+      } else {
+        // En modo 'per_request' (esperando que el usuario consulte) o 'off': null
+        stockfishRec = null;
+      }
 
       // 2. GarboChess: Recomendación Teórica Posicional
       const garboStart = performance.now();
@@ -346,15 +438,16 @@ export class ChessSupervisor {
       );
       controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
 
-      // 4. Motor Personal: Disponible y adaptándose activamente (Con flechas en el tablero)
+      // 4. Motor Personal: Disponible y adaptándose activamente con detección anti-copia de Stockfish
       let personalRec: EngineRecommendation | null = null;
       if (personalStatus.isUnlocked) {
         const pStart = performance.now();
         try {
           personalRec = runPersonalRecommendation({
-            chess,
+            chess: new Chess(chess.fen()),
             profile,
             games: storedGames,
+            stockfishMoveSan: stockfishRec?.san,
           });
         } catch (pErr) {
           console.warn('[Supervisor] Fallback seguro en Motor Personal:', pErr);
@@ -383,7 +476,7 @@ export class ChessSupervisor {
       const arrows: CandidateArrow[] = [];
 
       if (!shouldSuppressArrows) {
-        if (stockfishRec && stockfishRec.move) {
+        if (this.state.stockfishMode !== 'off' && stockfishRec && stockfishRec.move) {
           arrows.push({
             from: stockfishRec.from,
             to: stockfishRec.to,
@@ -430,7 +523,7 @@ export class ChessSupervisor {
       // Compute Agreements
       const moveEngineMap = new Map<string, { san: string; engines: EngineType[] }>();
       const allRecs: Array<{ engine: EngineType; rec: EngineRecommendation | null }> = [
-        { engine: 'stockfish', rec: stockfishRec },
+        { engine: 'stockfish', rec: this.state.stockfishMode === 'off' ? null : stockfishRec },
         { engine: 'garbo', rec: garboRec },
         { engine: 'maia', rec: maiaRec },
         { engine: 'personal', rec: personalRec },
@@ -666,13 +759,17 @@ export class ChessSupervisor {
   }
 
   public async requestStockfishUse(chess: Chess): Promise<void> {
-    if (this.state.stockfishRemainingUses <= 0) return;
+    if (this.state.stockfishMode === 'off') return;
+    if (this.state.stockfishMode === 'per_request' && this.state.stockfishRemainingUses <= 0) return;
 
     this.state.loadingStates.stockfish = true;
     this.onStateChange({ ...this.state });
 
     const startTime = performance.now();
-    const remaining = this.state.stockfishRemainingUses - 1;
+    const remaining =
+      this.state.stockfishMode === 'per_request'
+        ? Math.max(0, this.state.stockfishRemainingUses - 1)
+        : this.state.stockfishRemainingUses;
 
     let rec: EngineRecommendation | null = null;
     try {
@@ -727,6 +824,10 @@ export class ChessSupervisor {
         ...this.state.loadingStates,
         stockfish: false,
       },
+      agreements: this.computeAgreements({
+        ...this.state.recommendations,
+        stockfish: rec,
+      }),
     };
     this.onStateChange(this.state);
   }
