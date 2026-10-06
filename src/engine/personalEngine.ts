@@ -409,10 +409,8 @@ export function runPersonalRecommendation(
 
     scoredCandidates.sort((a, b) => b.score - a.score);
 
-    // --- DETECCIÓN Y DIFERENCIACIÓN FRENTE A STOCKFISH (ANTI-MIRRORING) ---
-    // Si la posición está FUERA DE LIBRO, el Motor Personal rechaza copiar mecánicamente a Stockfish.
-    // Detecta activamente jugadas fuera de libro y da prioridad a opciones auténticas del biotipo del jugador.
-    let chosen = scoredCandidates[0];
+    // Stockfish is compared only after the personal choice has been made.
+    const chosen = scoredCandidates[0];
     let isDifferentFromStockfish = false;
     let contrastReason = '';
 
@@ -422,21 +420,8 @@ export function runPersonalRecommendation(
       if (isOutOfBook) {
         // POSICIÓN FUERA DE LIBRO: Diferenciación activa contra Stockfish
         if (stockfishMatchesChosen) {
-          // Buscar una variante alternativa auténtica que no cuelgue material
-          const personalAlternative = scoredCandidates.find(
-            (c) => c.move.san !== stockfishMoveSan && !vetoedSan.has(c.move.san) && (chosen.score - c.score) <= 30
-          );
-
-          if (personalAlternative) {
-            // Divergencia soberana intencionada
-            chosen = personalAlternative;
-            isDifferentFromStockfish = true;
-            contrastReason = `⚡ Fuera de libro detectado: Stockfish propone el cálculo de máquina ${stockfishMoveSan}, pero tu Motor Personal elige ${personalAlternative.move.san} guiado por tu estilo (${styleProfile.archetype}) y tus 8 ayudantes.`;
-          } else {
-            // No existe alternativa segura sin perder material: forzada táctica
-            isDifferentFromStockfish = false;
-            contrastReason = `🤝 Fuera de libro detectado: Jugada táctica forzada. Tu instinto y Stockfish convergen en ${chosen.move.san} por necesidad de la posición.`;
-          }
+          isDifferentFromStockfish = false;
+          contrastReason = `Fuera de libro: la puntuacion de tu historial y estilo coincide con Stockfish en ${chosen.move.san}. Coincidir no significa copiar ni que sea una jugada forzada.`;
         } else {
           isDifferentFromStockfish = true;
           contrastReason = `⚡ Fuera de libro detectado: Elección soberana del Motor Personal (${chosen.move.san}) con identidad propia vs línea de máquina de Stockfish (${stockfishMoveSan}).`;
@@ -499,3 +484,4 @@ export function runPersonalRecommendation(
     return null;
   }
 }
+

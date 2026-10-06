@@ -155,6 +155,7 @@ export class ChessSupervisor {
     }
 
     if (mode === 'off') {
+      realStockfish.stop();
       this.state = {
         ...this.state,
         stockfishMode: 'off',
@@ -444,7 +445,7 @@ export class ChessSupervisor {
         const pStart = performance.now();
         try {
           personalRec = runPersonalRecommendation({
-            chess: new Chess(chess.fen()),
+            chess,
             profile,
             games: storedGames,
             stockfishMoveSan: stockfishRec?.san,
@@ -584,13 +585,14 @@ export class ChessSupervisor {
     // Refinar de forma asíncrona con Stockfish 19 WASM real solo en el turno del jugador (180ms)
     // para jamás saturar la cola del motor ni robar recursos si la IA está por responder
     const isPlayerTurn = chess.turn() === userColor;
-    if (isPlayerTurn && realStockfish.isReady()) {
+    if (this.state.stockfishMode === 'always_active' && isPlayerTurn && realStockfish.isReady()) {
       const currentFen = fen;
       const currentGen = generation;
       realStockfish
         .analyze(currentFen, { movetime: 180 })
         .then((real) => {
         if (!real || !real.from || !real.to) return;
+        if (this.state.stockfishMode !== 'always_active') return;
         if (this.state.generation !== currentGen || this.state.isGameOver) return;
 
         const refinedStockfishRec: EngineRecommendation = {
@@ -760,8 +762,12 @@ export class ChessSupervisor {
 
   public async requestStockfishUse(chess: Chess): Promise<void> {
     if (this.state.stockfishMode === 'off') return;
+    if (this.state.loadingStates.stockfish || this.state.isGameOver) return;
     if (this.state.stockfishMode === 'per_request' && this.state.stockfishRemainingUses <= 0) return;
 
+    const requestGeneration = this.state.generation;
+    const requestFen = chess.fen();
+    const requestMode = this.state.stockfishMode;
     this.state.loadingStates.stockfish = true;
     this.onStateChange({ ...this.state });
 
@@ -771,9 +777,12 @@ export class ChessSupervisor {
         ? Math.max(0, this.state.stockfishRemainingUses - 1)
         : this.state.stockfishRemainingUses;
 
+    this.state.stockfishRemainingUses = remaining;
+    this.onStateChange({ ...this.state });
+
     let rec: EngineRecommendation | null = null;
     try {
-      const real = await realStockfish.analyze(chess.fen(), { movetime: 800 });
+      const real = await realStockfish.analyze(requestFen, { movetime: 800 });
       if (real && real.from && real.to) {
         rec = {
           engine: 'stockfish',
@@ -791,6 +800,12 @@ export class ChessSupervisor {
       }
     } catch {
       // fallback
+    }
+
+    if (this.state.generation !== requestGeneration || this.state.stockfishMode !== requestMode || chess.fen() !== requestFen) {
+      this.state.loadingStates.stockfish = false;
+      this.onStateChange({ ...this.state });
+      return;
     }
 
     if (!rec) {
@@ -894,3 +909,4 @@ export class ChessSupervisor {
     this.onStateChange(this.state);
   }
 }
+

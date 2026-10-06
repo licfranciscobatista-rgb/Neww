@@ -400,17 +400,11 @@ export function App() {
       chessjs: 'CHESSJS_ASSISTED',
     };
 
-    if (engineKey === 'stockfish' && supervisorState.stockfishMode === 'per_request') {
-      supervisorRef.current?.deductStockfishUse();
-    }
-
     executeMove(from, to, sourceMap[engineKey], moveUci.length > 4 ? moveUci[4] : undefined);
   };
 
   const handleChangeStockfishMode = useCallback((mode: StockfishOperatingMode) => {
-    if (supervisorRef.current) {
-      supervisorRef.current.setStockfishMode(mode, chess);
-    }
+    supervisorRef.current?.setStockfishMode(mode, chess);
   }, [chess]);
 
   const handleStartNewGame = (options: NewGameOptions) => {
@@ -910,3 +904,4 @@ export function App() {
 }
 
 export default App;
+
