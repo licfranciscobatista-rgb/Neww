@@ -56,21 +56,31 @@ export interface PersonalAuditReport {
 export class PlayerGraphSubEngine {
   private static cachedGraph: Map<string, PlayerPositionNode> | null = null;
   private static cachedGamesHash = '';
-  private static cachedProcessedIds = new Set<string>();
 
   public static clearCache(): void {
     this.cachedGraph = null;
     this.cachedGamesHash = '';
-    this.cachedProcessedIds.clear();
   }
 
   private static processGameIntoGraph(
     game: GameRecord,
     graph: Map<string, PlayerPositionNode>
   ): void {
-    if (!game.moves || game.moves.length === 0) return;
-
-    const sim = new Chess();
+    let moves = game.moves || [];
+    if (!moves.length && game.pgn) {
+      try {
+        const imported = new Chess();
+        imported.loadPgn(game.pgn);
+        moves = imported.history({ verbose: true }).map((move, index) => ({
+          from: move.from, to: move.to, san: move.san, fenBefore: move.before,
+          ply: index + 1, source: 'MANUAL' as const,
+        }));
+      } catch {
+        return;
+      }
+    }
+    if (!moves.length) return;
+    const sim = moves[0].fenBefore ? new Chess(moves[0].fenBefore) : new Chess();
     const userColor = game.playerColor || 'w';
     const result = game.result || '*';
 
@@ -83,14 +93,14 @@ export class PlayerGraphSubEngine {
       (userColor === 'b' && result === '1-0');
 
     // Indexar hasta 100 plies (apertura, medio juego y finales) de cada partida del usuario
-    const maxPlies = Math.min(100, game.moves.length);
+    const maxPlies = Math.min(100, moves.length);
     for (let i = 0; i < maxPlies; i++) {
-      const m = game.moves[i];
+      const m = moves[i];
       if (!m) continue;
-      const fenKey = sim.fen().split(' ').slice(0, 2).join(' '); // tablero + turno
+      const fenKey = sim.fen().split(' ').slice(0, 4).join(' ');
       const isUserTurn = sim.turn() === userColor;
 
-      if (isUserTurn) {
+      if (isUserTurn && m.source === 'MANUAL') {
         let node = graph.get(fenKey);
         if (!node) {
           node = {
@@ -123,7 +133,7 @@ export class PlayerGraphSubEngine {
       }
 
       try {
-        sim.move(m.san || { from: m.from, to: m.to });
+        sim.move(m.san || { from: m.from, to: m.to, promotion: 'q' });
       } catch {
         break; // Fin de la secuencia si hay error en PGN
       }
@@ -131,27 +141,19 @@ export class PlayerGraphSubEngine {
   }
 
   public static buildGraph(games: GameRecord[]): Map<string, PlayerPositionNode> {
-    const hash = `${games.length}_${games[0]?.id || ''}_${games[0]?.moves?.length || 0}`;
+    const gamesToProcess = games.slice(0, 50);
+    const hash = JSON.stringify(gamesToProcess.map((game) => [game.id, game.result, game.playerColor, game.pgn,
+      game.moves?.map((move) => [move.san, move.source, move.fenBefore])]));
     if (this.cachedGraph && this.cachedGamesHash === hash) {
       return this.cachedGraph;
     }
 
-    // Actualización incremental ultra-rápida (<0.2ms) si solo se agregó 1 partida nueva
-    if (this.cachedGraph && games.length > 0 && !this.cachedProcessedIds.has(games[0].id)) {
-      this.processGameIntoGraph(games[0], this.cachedGraph);
-      this.cachedProcessedIds.add(games[0].id);
-      this.cachedGamesHash = hash;
-      return this.cachedGraph;
-    }
 
     const graph = new Map<string, PlayerPositionNode>();
-    this.cachedProcessedIds.clear();
 
     // Procesar hasta 50 partidas más recientes para máxima rapidez
-    const gamesToProcess = games.slice(0, 50);
     for (const game of gamesToProcess) {
       this.processGameIntoGraph(game, graph);
-      if (game.id) this.cachedProcessedIds.add(game.id);
     }
 
     this.cachedGraph = graph;
@@ -164,7 +166,7 @@ export class PlayerGraphSubEngine {
     graph: Map<string, PlayerPositionNode>,
     gamesCount: number
   ): SubEngineVerdict {
-    const fenKey = chess.fen().split(' ').slice(0, 2).join(' ');
+    const fenKey = chess.fen().split(' ').slice(0, 4).join(' ');
     const node = graph.get(fenKey);
 
     const favoredMoves: Array<{ san: string; score: number; rationale: string }> = [];
@@ -172,8 +174,10 @@ export class PlayerGraphSubEngine {
 
     if (node && Object.keys(node.movesChosen).length > 0) {
       for (const [san, stats] of Object.entries(node.movesChosen)) {
-        const winRate = stats.count > 0 ? (stats.wins + stats.draws * 0.5) / stats.count : 0.5;
-        const score = Math.min(100, Math.round(50 + winRate * 50));
+        const completed = stats.wins + stats.draws + stats.losses;
+        const winRate = (stats.wins + stats.draws * 0.5 + 1) / (completed + 2);
+        const frequency = stats.count / node.playCount;
+        const score = Math.min(100, Math.round(45 + frequency * 25 + winRate * 20));
 
         if (stats.losses > 0 && stats.wins === 0 && stats.count >= 2) {
           vetoMoves.push({
@@ -310,9 +314,11 @@ export class RepertoireSubEngine {
     gamesCount: number
   ): SubEngineVerdict {
     const favoredMoves: Array<{ san: string; score: number; rationale: string }> = [];
-    const isEarlyPhase = chess.history().length < 16;
+    const isEarlyPhase = Number(chess.fen().split(' ')[5]) <= 8;
+    const currentKey = chess.fen().split(' ').slice(0, 4).join(' ');
     const knownMoves = new Set(
-      distilled.userMoves.filter((um) => um.ply < 16).map((um) => um.san)
+      distilled.userMoves.filter((um) => um.ply < 16 && um.fenBefore &&
+        um.fenBefore.split(' ').slice(0, 4).join(' ') === currentKey).map((um) => um.san)
     );
 
     if (isEarlyPhase) {
@@ -359,7 +365,7 @@ export class BlunderShieldSubEngine {
 
     // Verificación táctica O(1) ultrarrápida sin sobrecarga (<0.1ms)
     for (const m of legalMoves) {
-      if (m.piece !== 'q' && m.piece !== 'r') continue;
+      if (!['q', 'r', 'b', 'n'].includes(m.piece) || m.san.includes('#')) continue;
 
       let moved = false;
       try {
@@ -375,7 +381,7 @@ export class BlunderShieldSubEngine {
           if (!isDefended) {
             vetoMoves.push({
               san: m.san,
-              reason: `Escudo Táctico: ${m.san} deja pieza mayor desprotegida bajo ataque.`,
+              reason: `Escudo Tactico: ${m.san} deja una pieza sin defensa bajo ataque.`,
             });
           }
         }
@@ -510,7 +516,9 @@ export class EndgameSubEngine {
     legalMoves: Move[],
     distilled: DistilledUserData
   ): SubEngineVerdict {
-    const isEndgame = chess.history().length >= 30;
+    const nonPawnMaterial = chess.board().flat().reduce((sum, piece) =>
+      sum + (piece ? ({ n: 3, b: 3, r: 5, q: 9, p: 0, k: 0 }[piece.type]) : 0), 0);
+    const isEndgame = nonPawnMaterial <= 13;
     const favoredMoves: Array<{ san: string; score: number; rationale: string }> = [];
 
     if (isEndgame) {
@@ -552,9 +560,9 @@ export function runSubEngineAudit(
 ): PersonalAuditReport {
   const legalMoves = chess.moves({ verbose: true });
   const graph = PlayerGraphSubEngine.buildGraph(games);
-  const gamesCount = games.length;
+  const gamesCount = distilled.manualGamesCount;
 
-  const fenKey = chess.fen().split(' ').slice(0, 2).join(' ');
+  const fenKey = chess.fen().split(' ').slice(0, 4).join(' ');
   const knownNode = graph.get(fenKey);
 
   const vGraph = PlayerGraphSubEngine.audit(chess, graph, gamesCount);
@@ -591,3 +599,4 @@ export function runSubEngineAudit(
     },
   };
 }
+

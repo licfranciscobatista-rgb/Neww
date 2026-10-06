@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import { GameRecord } from '../types/chess';
-import { lookupTheory, distillBookMove } from './theoryBook';
+import { lookupTheory, distillBookMove, getNextTheoryMoves } from './theoryBook';
 
 export interface DistilledMoveData {
   san: string;
@@ -74,8 +74,9 @@ export class HistoryAssistant {
         return this.getEmptyDistilledData();
       }
 
-      // Generar clave de caché ultrarrápida O(1)
-      const currentKey = `${games.length}_${games[0]?.id || ''}_${games[0]?.moves?.length || 0}_${games[0]?.result || ''}`;
+      // Invalidate learned data when an older game is edited or removed.
+      const currentKey = JSON.stringify(games.map((game) => [game.id, game.result, game.playerColor,
+        game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime])]));
       if (this.cachedResult && this.cacheKey === currentKey) {
         return this.cachedResult;
       }
@@ -117,18 +118,19 @@ export class HistoryAssistant {
               to: m.to,
               san: m.san,
               ply: idx + 1,
+              fenBefore: m.before,
               source: 'MANUAL' as const,
               thinkTime: 10,
               timestamp: Date.now(),
             }));
-            game.moves = moves;
           } catch {
             // Ignorar errores si el PGN está malformado
           }
         }
 
-        const hasManualMoves = moves.some((m) => m && m.source === 'MANUAL');
-        if (hasManualMoves || moves.length > 0) {
+        const hasManualMoves = moves.some((m, i) => m && m.source === 'MANUAL' &&
+          (i % 2 === 0 ? 'w' : 'b') === game.playerColor);
+        if (hasManualMoves) {
           manualGamesCount++;
         }
 
@@ -136,28 +138,27 @@ export class HistoryAssistant {
           (game.playerColor === 'w' && game.result === '1-0') ||
           (game.playerColor === 'b' && game.result === '0-1');
 
-        const isGameOpeningKnown = !!game.openingName && game.openingName !== 'Partida Abierta / Variante Personal';
+        const sanHistory: string[] = [];
 
         for (let i = 0; i < moves.length; i++) {
           const m = moves[i];
           if (!m) continue;
+
+          const san = m.san || '';
+          const isUserBookMove = getNextTheoryMoves(sanHistory).includes(san);
+          sanHistory.push(san);
 
           const isUserTurn =
             (i % 2 === 0 && game.playerColor === 'w') ||
             (i % 2 === 1 && game.playerColor === 'b');
 
           // Filtrar y descartar jugadas asistidas con IA
-          const isIaAssisted = m.source && m.source !== 'MANUAL';
+          if (!isUserTurn) continue;
+          const isIaAssisted = m.source !== 'MANUAL';
           if (isIaAssisted) {
             discardedIaCount++;
             continue;
           }
-
-          const san = m.san || '';
-
-          // Determinación ultrarrápida de jugadas de libro sin instanciar Chess() en bucle
-          const isEarlyOpening = i < 10;
-          const isUserBookMove = isEarlyOpening && isGameOpeningKnown;
 
           if (isUserBookMove) {
             discardedBookCount++;
@@ -211,7 +212,7 @@ export class HistoryAssistant {
               ply: m.ply || i + 1,
               gameId: game.id || 'unknown',
               thinkTimeSeconds: think,
-              fenBefore: '',
+              fenBefore: m.fenBefore || '',
               isOpening: i < 14,
               isBookMove: isUserBookMove,
               bookOpeningName: isUserBookMove ? game.openingName : undefined,
@@ -918,3 +919,4 @@ export function auditAllAssistantsHealth(): AssistantHealthStatus[] {
 
   return results;
 }
+

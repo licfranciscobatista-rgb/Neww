@@ -193,7 +193,8 @@ export function getPersonalEngineStatus(
 ): PersonalEngineStatus {
   try {
     const storedGames = games || loadGameRecords();
-    const hash = `${storedGames.length}_${storedGames[0]?.id || ''}_${profile.gamesPlayed}_${includeDNA}`;
+    const hash = JSON.stringify([includeDNA, storedGames.map((game) => [game.id, game.result,
+      game.playerColor, game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime])])]);
 
     if (!currentChess && cachedPersonalStatus && cachedPersonalHash === hash) {
       return cachedPersonalStatus;
@@ -203,7 +204,7 @@ export function getPersonalEngineStatus(
     // Solo compilar DNA pesado cuando se solicite explícitamente (ej: pestaña Perfil), jamás en cada jugada
     const compiledDNA = includeDNA ? compilePersonalEngineDNA(profile, storedGames, distilled) : undefined;
 
-    const effectiveGames = Math.max(profile.gamesPlayed, distilled.manualGamesCount);
+    const effectiveGames = distilled.manualGamesCount;
     const requiredGames = 10;
     const isUnlocked = effectiveGames >= 1;
     const isFullyCalibrated = effectiveGames >= requiredGames;
@@ -216,7 +217,7 @@ export function getPersonalEngineStatus(
 
     let statusMessage = '';
     if (isFullyCalibrated) {
-      statusMessage = `Motor Personal Soberano (100% Calibrado): ADN propio consolidado con ${effectiveGames} partidas (${(distilled.distilledBytes / 1024).toFixed(1)} KB destilados de ${Math.round(distilled.rawPgnBytes / 1024)} KB brutos).`;
+      statusMessage = `Perfil personal basado en ${effectiveGames} partidas con decisiones manuales. Sigue aprendiendo; la cantidad de partidas no garantiza la calidad de cada jugada.`;
     } else if (effectiveGames > 0) {
       statusMessage = `Calibración Progresiva (${effectiveGames}/${requiredGames} partidas): Aprendiendo de tu estilo activo en tiempo real (${progressPercent}% completado).`;
     } else {
@@ -297,7 +298,11 @@ export function runPersonalRecommendation(
     // Detección estricta de Libro vs Fuera de Libro en la posición actual
     const currentHistory = chess.history();
     const positionTheory = lookupTheory(currentHistory);
-    const isOutOfBook = !positionTheory.isBook;
+    const fenFields = chess.fen().split(' ');
+    const expectedPlies = (Number(fenFields[5]) - 1) * 2 + (fenFields[1] === 'b' ? 1 : 0);
+    const reliableHistory = currentHistory.length === expectedPlies &&
+      (currentHistory.length > 0 || fenFields.slice(0, 4).join(' ') === new Chess().fen().split(' ').slice(0, 4).join(' '));
+    const isOutOfBook = !reliableHistory || !positionTheory.isBook;
 
     // Ejecución de los 8 Sub-Motores autónomos
     const auditReport = runSubEngineAudit(chess, distilled, storedGames, timeRemainingSeconds);
@@ -318,8 +323,7 @@ export function runPersonalRecommendation(
     }> = [];
 
     for (const m of legalMoves) {
-      // Si la jugada está vetada por riesgo táctico de colgada, descartar
-      if (vetoedSan.has(m.san) && legalMoves.length > 1) {
+      if (vetoedSan.has(m.san) && legalMoves.some((candidate) => !vetoedSan.has(candidate.san))) {
         continue;
       }
 
@@ -327,14 +331,15 @@ export function runPersonalRecommendation(
       const isCandidateBook = !isOutOfBook && moveDistill.isBook;
 
       let compositeScore = 50;
-      let moveRationale = '';
+      if (m.san.includes('#')) compositeScore += 1000;
+      let moveRationale = m.san.includes('#') ? 'Mate inmediato: termina la partida.' : '';
       let isAuthenticPersonalMatch = false;
 
       // Aporte Sub-Motor 1 (Grafo Posicional): Si el usuario ya la jugó en esta misma posición
       const inGraph = graphFavored.find((g) => g.san === m.san);
       if (inGraph) {
         compositeScore += inGraph.score * 0.45;
-        moveRationale = inGraph.rationale;
+        if (!moveRationale) moveRationale = inGraph.rationale;
         isAuthenticPersonalMatch = true;
       }
 
@@ -457,7 +462,7 @@ export function runPersonalRecommendation(
     return {
       engine: 'personal',
       engineName: 'Motor Personal',
-      move: `${chosen.move.from}${chosen.move.to}`,
+      move: `${chosen.move.from}${chosen.move.to}${chosen.move.promotion || ''}`,
       from: chosen.move.from,
       to: chosen.move.to,
       san: chosen.move.san,
@@ -465,7 +470,8 @@ export function runPersonalRecommendation(
       evalDisplay: isChosenBook
         ? `Libro ECO • ${chosen.bookOpeningName || positionTheory.openingName}`
         : `ADN Propio • ${styleProfile.archetype} (${storedGames.length} part.)`,
-      confidence: Math.round(Math.min(100, chosen.score)),
+      confidence: Math.round(Math.min(90, 35 + Math.min(10, distilled.manualGamesCount) * 4 +
+        (chosen.isAuthenticPersonalMatch ? 10 : 0))),
       explanation: chosen.rationale,
       color: '#fbbf24',
       timeTakenMs: 4,
