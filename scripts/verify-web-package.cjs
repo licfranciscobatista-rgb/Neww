@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
-const root = path.resolve(__dirname, '../dist');
+const root = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__dirname, '../dist');
 const required = ['build-info.json', 'index.html', 'openings/catalogue.json', 'rodent/rodent.js', 'rodent/rodent.wasm', 'rodent/worker.js', 'rodent/LICENSE', 'garbo/garbochess.js', 'maia/maia-worker.js', 'maia/maia3.json', ...Array.from({length:4}, (_, i) => `maia/maia3.bin.${i}`), 'stockfish/stockfish-19-lite-single.wasm'];
 for (const color of ['w', 'b']) for (const piece of ['p', 'n', 'b', 'r', 'q', 'k']) required.push(`pieces/neo/${color}${piece}.png`);
 for (const name of required) assert.ok(fs.statSync(path.join(root, name)).size > 0, `Missing packaged asset: ${name}`);
@@ -11,6 +11,8 @@ assert.equal(identity.commit, process.env.VITE_BUILD_COMMIT || 'local');
 const files = {};
 function walk(folder) {
   for (const entry of fs.readdirSync(folder, {withFileTypes:true})) {
+    // Android asset packaging excludes hidden metadata, not runtime assets.
+    if (entry.name.startsWith('.')) continue;
     const file = path.join(folder, entry.name);
     if (entry.isDirectory()) walk(file);
     else {
