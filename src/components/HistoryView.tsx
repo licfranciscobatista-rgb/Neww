@@ -17,6 +17,7 @@ import { GameRecord } from '../types/chess';
 import { saveGameRecord, deleteGameRecord } from '../storage/chessStorage';
 import { downloadFile } from '../utils/downloadFile';
 import { GameReplayModal } from './GameReplayModal';
+import { matchesHistoryFilters } from '../utils/historyFilters';
 
 interface HistoryViewProps {
   games: GameRecord[];
@@ -32,15 +33,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onRefreshGames,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [colorFilter, setColorFilter] = useState('');
+  const [resultFilter, setResultFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const [replayGame, setReplayGame] = useState<GameRecord | null>(null);
   const [pgnInput, setPgnInput] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
-  const filteredGames = games.filter((g) => {
-    const text = `${g.title} ${g.openingName || ''} ${g.openingEco || ''} ${g.result}`.toLowerCase();
-    return text.includes(searchTerm.toLowerCase());
-  });
+  const filteredGames = games.filter(game => matchesHistoryFilters(game, {search:searchTerm, color:colorFilter, result:resultFilter, date:dateFilter}));
 
   const handleExportPgn = (game: GameRecord) => {
     downloadFile(game.pgn, 'application/x-chess-pgn', `${game.title.replace(/\s+/g, '_')}.pgn`);
@@ -169,12 +170,25 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <select aria-label="Filtrar por color" value={colorFilter} onChange={event => setColorFilter(event.target.value)} className="min-w-0 bg-slate-900 border border-slate-700 rounded-lg p-2">
+          <option value="">Todos los colores</option><option value="w">Blancas</option><option value="b">Negras</option>
+        </select>
+        <select aria-label="Filtrar por resultado" value={resultFilter} onChange={event => setResultFilter(event.target.value)} className="min-w-0 bg-slate-900 border border-slate-700 rounded-lg p-2">
+          <option value="">Todos los resultados</option><option value="win">Victoria</option><option value="loss">Derrota</option><option value="draw">Tablas</option><option value="unfinished">Sin finalizar</option>
+        </select>
+        <select aria-label="Filtrar por fecha" value={dateFilter} onChange={event => setDateFilter(event.target.value)} className="min-w-0 bg-slate-900 border border-slate-700 rounded-lg p-2">
+          <option value="">Todas las fechas</option>{[...new Set(games.map(game => game.date))].map(date => <option key={date} value={date}>{date}</option>)}
+        </select>
+      </div>
+      {(searchTerm || colorFilter || resultFilter || dateFilter) && <button type="button" onClick={() => {setSearchTerm(''); setColorFilter(''); setResultFilter(''); setDateFilter('');}} className="text-sky-300 text-xs">Limpiar filtros</button>}
+
       {filteredGames.length === 0 ? (
         <div className="p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl space-y-2">
           <FileText className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="font-medium text-slate-400">No hay partidas registradas aún</p>
+          <p className="font-medium text-slate-400">{games.length ? 'No hay partidas que coincidan con los filtros' : 'No hay partidas registradas aún'}</p>
           <p className="text-[11px] text-slate-500">
-            Juega partidas en el tablero o importa PGN para construir tu histórico y entrenar tu motor personal.
+            {games.length ? 'Prueba otra fecha, resultado o color.' : 'Las partidas importadas se guardan en el historial, pero no cuentan para calibrar el motor personal.'}
           </p>
         </div>
       ) : (
