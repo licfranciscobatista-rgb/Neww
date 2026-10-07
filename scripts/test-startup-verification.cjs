@@ -15,8 +15,14 @@ Module._load = function(request, parent, main) {
   return load.call(this, request, parent, main);
 };
 const { verifyStartup } = require('../src/engine/startupVerification.ts');
+const { controlDirector } = require('../src/engine/controlDirector.ts');
 const engines = Object.fromEntries(['stockfish', 'garbo', 'maia', 'personal'].map(name => [name, { name, isInstalled: false, isOperational: false, status: '' }]));
 (async () => {
+  const pending = controlDirector.consultGameReadiness();
+  assert.equal(pending.verificationComplete, false);
+  assert.equal(pending.ready, false);
+  assert.ok(pending.message.includes('Comprobando'));
+  assert.ok(!pending.message.includes('Alerta'));
   const base = { engines, ready: false, allEnginesOk: false };
   const good = await verifyStartup(base);
   assert.equal(good.verificationComplete, true);
@@ -35,5 +41,7 @@ const engines = Object.fromEntries(['stockfish', 'garbo', 'maia', 'personal'].ma
   assert.equal(calls, 5, 'Failed worker receives one retry');
   assert.equal(terminated, 2);
   assert.equal(base.engines.garbo.status, '', 'Base report is immutable');
+  controlDirector.recordStartupVerification(good);
+  assert.equal(controlDirector.consultGameReadiness(), good);
   console.log('PASS: startup success, retries, degraded operation, explicit neural fallback, eight assistants and worker cleanup.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -713,12 +713,13 @@ export class ControlDirectorManager {
     const subdirectorFpsOk = this.fps >= 50;
     const rulesEngineOk = true;
 
-    // Medición exacta de latencia (<1ms garantizado mediante comprobación en memoria)
+    // This is an in-memory snapshot; worker verification completes separately.
     const rawElapsed = performance.now() - t0;
-    const latencyMs = Number(Math.max(0.12, Math.min(rawElapsed, 0.85)).toFixed(2));
+    const latencyMs = Number(rawElapsed.toFixed(2));
 
     const report: GameReadinessReport = {
-      ready: allEnginesOk && memoryWithinLimits,
+      ready: false,
+      verificationComplete: false,
       latencyMs,
       timestamp: nowStr,
       allEnginesOk,
@@ -733,9 +734,7 @@ export class ControlDirectorManager {
       fps: Math.round(this.fps),
       memoryWithinLimits,
       totalRamMb,
-      message: allEnginesOk
-        ? `Control verificado en ${latencyMs} ms: Todos los 4 motores están correctamente instalados y funcionando.`
-        : 'Alerta: Uno o más motores no pasaron la verificación.',
+      message: 'Comprobando la respuesta real de los motores antes de iniciar.',
     };
 
     this.lastGameReadinessReport = report;
