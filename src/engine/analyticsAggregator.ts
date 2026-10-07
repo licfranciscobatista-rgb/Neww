@@ -66,8 +66,8 @@ export function aggregatePositionUsage(games: GameRecord[]): PositionUsageStat[]
   }>();
 
   for (const g of games) {
-    const key = g.openingName || 'Apertura de Peón de Rey';
-    const eco = g.openingEco || 'B00';
+    const key = g.openingName || 'Sin identificar';
+    const eco = g.openingEco || '—';
     const isWhite = g.playerColor === 'w';
     const isWin = (g.result === '1-0' && isWhite) || (g.result === '0-1' && !isWhite);
     const isLoss = (g.result === '0-1' && isWhite) || (g.result === '1-0' && !isWhite);
@@ -106,7 +106,7 @@ export function aggregatePositionUsage(games: GameRecord[]): PositionUsageStat[]
       wins: v.wins,
       losses: v.losses,
       draws: v.draws,
-      winRate: Math.round(((v.wins + v.draws * 0.5) / v.count) * 100),
+      winRate: v.wins + v.losses + v.draws ? Math.round(v.wins / (v.wins + v.losses + v.draws) * 100) : 0,
       commonMoves: v.movesSeq,
     }))
     .sort((a, b) => b.count - a.count);
@@ -244,6 +244,8 @@ export function aggregateEngineUsageAndEffectiveness(
   let totalMoves = 0;
   for (const g of games) {
     for (const m of g.moves) {
+      const turn = m.fenBefore?.split(' ')[1] || (m.ply % 2 === 1 ? 'w' : 'b');
+      if (turn !== g.playerColor) continue;
       counts[m.source] = (counts[m.source] || 0) + 1;
       totalMoves++;
     }
@@ -252,14 +254,17 @@ export function aggregateEngineUsageAndEffectiveness(
   const engineStats: Record<string, EnginePerformanceStat> = {};
   for (const src of sources) {
     const c = counts[src] || 0;
-    const pct = totalMoves > 0 ? Math.round((c / totalMoves) * 100) : (src === 'MANUAL' ? 100 : 0);
+    const pct = totalMoves > 0 ? Math.round((c / totalMoves) * 100) : 0;
+    const usedGames = games.filter(game => ['1-0', '0-1', '1/2-1/2'].includes(game.result) && game.moves.some(move =>
+      move.source === src && (move.fenBefore?.split(' ')[1] || (move.ply % 2 === 1 ? 'w' : 'b')) === game.playerColor));
+    const wins = usedGames.filter(game => game.result === (game.playerColor === 'w' ? '1-0' : '0-1')).length;
     engineStats[src] = {
       source: src,
       label: labels[src],
       color: colors[src],
       count: c,
       percentageOfMoves: pct,
-      gameWinRate: src === 'STOCKFISH_ASSISTED' ? 88 : src === 'GARBO_ASSISTED' ? 76 : src === 'MAIA_ASSISTED' ? 70 : 64,
+      gameWinRate: usedGames.length ? Math.round(wins / usedGames.length * 100) : 0,
       estimatedAccuracy: src === 'STOCKFISH_ASSISTED' ? 95 : src === 'GARBO_ASSISTED' ? 89 : src === 'MAIA_ASSISTED' ? 84 : 78,
       tacticalEfficiency: src === 'STOCKFISH_ASSISTED' ? 96 : src === 'GARBO_ASSISTED' ? 88 : src === 'MAIA_ASSISTED' ? 80 : 74,
       recommendedRole: roles[src],

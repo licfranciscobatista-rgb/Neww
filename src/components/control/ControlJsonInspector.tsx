@@ -119,7 +119,7 @@ export const ControlJsonInspector: React.FC = () => {
               </span>
             </div>
             <p className="text-[10px] text-slate-400">
-              Configuraciones canónicas parseadas de forma nativa en C++ a máxima velocidad
+              Configuraciones locales de la aplicación
             </p>
           </div>
         </div>

@@ -25,6 +25,7 @@ import {
 } from '../../engine/director/engineWorkloadMonitor';
 
 interface MetricsAndPerformanceCardProps {
+  showWorkload?: boolean;
   games: GameRecord[];
   profile?: PlayerProfile;
   reports?: GameAnalysisReport[];
@@ -33,16 +34,18 @@ interface MetricsAndPerformanceCardProps {
 export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps> = ({
   games,
   reports = [],
+  showWorkload = true,
 }) => {
-  const [activeDimension, setActiveDimension] = useState<'workload' | 'openings' | 'engines' | 'learning'>('workload');
+  const [activeDimension, setActiveDimension] = useState<'workload' | 'openings' | 'engines' | 'learning'>(showWorkload ? 'workload' : 'openings');
   const [engineHealth, setEngineHealth] = useState<EngineHealthMap>(() => engineWorkloadMonitor.getHealth());
 
   useEffect(() => {
+    if (!showWorkload) return;
     const unsubscribe = engineWorkloadMonitor.subscribe((newHealth) => {
       setEngineHealth(newHealth);
     });
     return unsubscribe;
-  }, []);
+  }, [showWorkload]);
 
   const positions = aggregatePositionUsage(games);
   const engineSummary = aggregateEngineUsageAndEffectiveness(games, reports);
@@ -58,17 +61,17 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
               <BarChart3 className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-white text-sm">
-              Métricas & Rendimiento de Motores y Partidas
+              {showWorkload ? 'Rendimiento de motores' : 'Resultados, aperturas y aprendizaje'}
             </h3>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            Supervisión continua de latencias de motores, adopción táctica y repertorio personal consolidado.
+            {showWorkload ? 'Estado del análisis' : `${games.length} partidas guardadas · ${reports.filter(report => games.some(game => game.id === report.gameId)).length} informes de análisis`}
           </p>
         </div>
 
         {/* Tab Selector */}
         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto overflow-x-auto max-w-full">
-          <button
+          {showWorkload && <button
             onClick={() => setActiveDimension('workload')}
             className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeDimension === 'workload'
@@ -78,7 +81,7 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Carga & Latencia</span>
-          </button>
+          </button>}
 
           <button
             onClick={() => setActiveDimension('openings')}
@@ -231,7 +234,7 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
                             : 'bg-rose-950 text-rose-300 border-rose-700'
                         }`}
                       >
-                        {pos.winRate}% Victoria
+                        {pos.wins + pos.losses + pos.draws ? `${pos.winRate}% victorias` : 'Sin resultados'}
                       </span>
                     </div>
                   </div>
@@ -247,7 +250,7 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
                       <span className="text-rose-400 font-semibold">{pos.losses}D</span>
                     </div>
                     <span className="text-slate-400 font-mono text-[10px]">
-                      Eficacia total: {pos.winRate}%
+                      {pos.wins + pos.losses + pos.draws} partidas con resultado
                     </span>
                   </div>
                 </div>
@@ -299,8 +302,8 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
                 </div>
 
                 <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-300 flex justify-between">
-                  <span>Victoria al aplicar:</span>
-                  <span className="font-bold text-emerald-400 font-mono">{stat.gameWinRate}%</span>
+                  <span>Victorias en partidas con uso:</span>
+                  <span className="font-bold text-emerald-400 font-mono">{stat.count ? `${stat.gameWinRate}%` : 'Sin datos'}</span>
                 </div>
               </div>
             ))}
@@ -309,7 +312,13 @@ export const MetricsAndPerformanceCard: React.FC<MetricsAndPerformanceCardProps>
       )}
 
       {/* DIMENSION 4: APRENDIZAJE PROPIO */}
-      {activeDimension === 'learning' && (
+      {!showWorkload && activeDimension === 'learning' && <div className="space-y-3 text-xs">
+        <h4 className="font-bold">Base de aprendizaje</h4>
+        <p>{games.length} partidas archivadas · {positions.length} aperturas registradas.</p>
+        <p>{engineSummary.engineStats.MANUAL.count} jugadas propias manuales registradas.</p>
+        <p className="text-slate-400">No hay una evaluación validada de patrones tácticos aprendidos en estas métricas.</p>
+      </div>}
+      {showWorkload && activeDimension === 'learning' && (
         <div className="space-y-3">
           <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
             <h4 className="font-bold text-white text-xs flex items-center gap-1.5">

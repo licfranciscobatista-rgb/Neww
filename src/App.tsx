@@ -45,14 +45,17 @@ import { GameControls } from './components/GameControls';
 import { GameTurnClockBar } from './components/GameTurnClockBar';
 import { HumanityVerdictModal } from './components/HumanityVerdictModal';
 import { NewGameModal, NewGameOptions, ShowLinesMode } from './components/NewGameModal';
+import { PositionSetupModal } from './components/PositionSetupModal';
+import { useMoveTimer } from './utils/useMoveTimer';
 import { FinishGameModal, GameResultType } from './components/FinishGameModal';
 import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
 import { ControlView } from './components/ControlView';
+import { MetricsAndPerformanceCard } from './components/control/MetricsAndPerformanceCard';
 import { OfflineIndicator, useOnlineStatus } from './components/OfflineIndicator';
 import { HumanityVerdictResult } from './engine/humanityVerdict';
 
-type ActiveTab = 'board' | 'history' | 'profile' | 'control';
+type ActiveTab = 'board' | 'history' | 'profile' | 'control' | 'analytics';
 
 // Fuerza del rival en partidas contra la IA (Elo calibrado de Stockfish real: mín. 1320, máx. 3190)
 const AI_OPPONENT_ELO = 1500;
@@ -60,6 +63,7 @@ const AI_OPPONENT_ELO = 1500;
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('board');
   const [chess, setChess] = useState<Chess>(() => new Chess());
+  const startingFenRef = useRef(new Chess().fen());
   const [profile, setProfile] = useState<PlayerProfile>(() => loadPlayerProfile());
   const [games, setGames] = useState<GameRecord[]>(() => loadGameRecords());
   const [reports, setReports] = useState<GameAnalysisReport[]>(() => loadAnalysisReports());
@@ -79,6 +83,8 @@ export function App() {
 
   // Modals
   const [isNewGameModalOpen, setIsNewGameModalOpen] = useState(false);
+  const [isPositionEditorOpen, setIsPositionEditorOpen] = useState(false);
+  const readMoveSeconds = useMoveTimer(chess.fen(), activeTab === 'board' && !isNewGameModalOpen && !isPositionEditorOpen);
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [verdictModalData, setVerdictModalData] = useState<{ san: string; verdict: HumanityVerdictResult } | null>(null);
   const [checkmateNotice, setCheckmateNotice] = useState<string | null>(null);
@@ -101,7 +107,7 @@ export function App() {
     stockfish: true,
     personal: true,
     maia: true,
-    garbo: false,
+    garbo: true,
     chessjs: false, // Chess.js es sin flecha según directiva
   });
 
@@ -180,7 +186,7 @@ export function App() {
 
   // Precision timestamp-based clock timer (eliminates 1-second drift and survives rapid moves)
   useEffect(() => {
-    if (!isClockRunning || chess.isGameOver()) return;
+    if (!isClockRunning || chess.isGameOver() || whiteTime < 0 || blackTime < 0) return;
 
     lastClockTickRef.current = Date.now();
 
@@ -218,7 +224,7 @@ export function App() {
     }, 250);
 
     return () => clearInterval(interval);
-  }, [isClockRunning, chess]);
+  }, [isClockRunning, chess, whiteTime < 0, blackTime < 0]);
 
   // AI auto-reply when in vs_ai mode and it's the AI's turn
   useEffect(() => {
@@ -318,11 +324,15 @@ export function App() {
       // Record move
       const newGameMove: GameMove = {
         ply: movesList.length + 1,
-        moveNumber: Math.floor(movesList.length / 2) + 1,
+        moveNumber: Number(res.before.split(' ')[5]),
         san: res.san,
         from,
         to,
         uci: `${from}${to}${res.promotion ?? ''}`,
+        fenBefore: res.before,
+        fenAfter: res.after,
+        thinkTime: source === 'MANUAL' ? readMoveSeconds() : undefined,
+        timingMeasured: source === 'MANUAL',
         source,
         timestamp: Date.now(),
       };
@@ -409,7 +419,8 @@ export function App() {
 
   const handleStartNewGame = (options: NewGameOptions) => {
     const newId = `game_${Date.now()}`;
-    const freshChess = new Chess();
+    const freshChess = new Chess(options.startingFen);
+    startingFenRef.current = freshChess.fen();
     setChess(freshChess);
     setGameId(newId);
     setUserColor(options.userColor);
@@ -421,8 +432,8 @@ export function App() {
     setCheckmateNotice(null);
     accumulatedClockMsRef.current = 0;
     lastClockTickRef.current = Date.now();
-    setWhiteTime(options.timeControlSeconds || 600);
-    setBlackTime(options.timeControlSeconds || 600);
+    setWhiteTime(options.timeControlSeconds === 0 ? -1 : options.timeControlSeconds ?? 600);
+    setBlackTime(options.timeControlSeconds === 0 ? -1 : options.timeControlSeconds ?? 600);
     setIsClockRunning(false);
     setIsNewGameModalOpen(false);
 
@@ -434,7 +445,7 @@ export function App() {
 
   const handleResetPosition = () => {
     handleConsultControl();
-    const fresh = new Chess();
+    const fresh = new Chess(startingFenRef.current);
     setChess(fresh);
     setMovesList([]);
     setLastMove(null);
@@ -461,7 +472,7 @@ export function App() {
     }
 
     const remainingPlies = history.slice(0, history.length - pliesToUndo);
-    const rebuiltChess = new Chess();
+    const rebuiltChess = new Chess(startingFenRef.current);
     for (const m of remainingPlies) {
       rebuiltChess.move({ from: m.from, to: m.to, promotion: m.promotion });
     }
@@ -525,6 +536,7 @@ export function App() {
     // Iniciar nuevo juego limpio
     setIsFinishModalOpen(false);
     const fresh = new Chess();
+    startingFenRef.current = fresh.fen();
     const newId = `game_${Date.now()}`;
     setChess(fresh);
     setGameId(newId);
@@ -555,6 +567,7 @@ export function App() {
       } else if (game.finalFen) {
         c.load(game.finalFen);
       }
+      startingFenRef.current = c.history({ verbose: true })[0]?.before || c.fen();
       setChess(c);
       setGameId(game.id);
       setUserColor(game.playerColor);
@@ -575,7 +588,7 @@ export function App() {
     setSelectedAnalysisGame(game);
     const existingReport = reports.find((r) => r.gameId === game.id);
     setSelectedAnalysisReport(existingReport || null);
-    setActiveTab('control');
+    handleTabChange('analytics');
   };
 
   return (
@@ -666,7 +679,11 @@ export function App() {
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span>Control & Métricas</span>
+          <span>Control</span>
+        </button>
+        <button onClick={() => handleTabChange('analytics')}
+          className={`px-3 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'analytics' ? 'border-sky-400 text-sky-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+          <Activity className="w-4 h-4" /><span>Métricas</span>
         </button>
       </nav>
 
@@ -785,6 +802,7 @@ export function App() {
                   boardOrientation={boardOrientation}
                   onFlipBoard={handleFlipBoard}
                   onNewGame={() => setIsNewGameModalOpen(true)}
+                  onEditPosition={() => setIsPositionEditorOpen(true)}
                   onResetPosition={handleResetPosition}
                   onUndoMove={handleUndoMove}
                   canUndo={movesList.length > 0}
@@ -821,6 +839,12 @@ export function App() {
                   loadingStates={supervisorState.loadingStates}
                   stockfishRemainingUses={supervisorState.stockfishRemainingUses}
                   garboRemainingUses={supervisorState.garboRemainingUses}
+                  garboOpening={supervisorState.garboOpening}
+                  garboOpeningState={supervisorState.garboOpeningState}
+                  onChangeGarboOpening={(id) => {
+                    setArrowFilter(previous => ({ ...previous, garbo: true }));
+                    supervisorRef.current?.setGarboOpening(id, chess);
+                  }}
                   stockfishMode={supervisorState.stockfishMode}
                   onChangeStockfishMode={handleChangeStockfishMode}
                   personalEngineUnlocked={supervisorState.personalEngineUnlocked}
@@ -850,12 +874,17 @@ export function App() {
             games={games}
             onLoadGame={handleLoadGameToBoard}
             onAnalyzeGame={handleAnalyzeGameInTab}
-            onRefreshGames={() => setGames(loadGameRecords())}
+            onRefreshGames={() => {
+              setGames(loadGameRecords());
+              setProfile(loadPlayerProfile());
+              setReports(loadAnalysisReports());
+            }}
           />
         )}
 
         {activeTab === 'profile' && (
           <ProfileView
+            games={games}
             profile={profile}
             onUpdateProfile={(p) => {
               setProfile(p);
@@ -867,12 +896,21 @@ export function App() {
         {activeTab === 'control' && (
           <ControlView />
         )}
+        {activeTab === 'analytics' && <div className="max-w-5xl mx-auto space-y-4">
+          <h2 className="text-base font-bold">Métricas de partidas</h2>
+          <MetricsAndPerformanceCard games={games} profile={profile} reports={reports} showWorkload={false} />
+        </div>}
       </main>
 
       {/* Offline Alert Indicator */}
       <OfflineIndicator />
 
       {/* Modals */}
+      {isPositionEditorOpen && <PositionSetupModal initialFen={chess.fen()} userColor={userColor} onClose={() => setIsPositionEditorOpen(false)} onConfirm={(fen, color) => {
+        handleStartNewGame({ startingFen: fen, userColor: color, gameMode: 'manual_board', timeControlSeconds: 0, showLinesMode, stockfishMode: supervisorState.stockfishMode });
+        setIsPositionEditorOpen(false);
+        setActiveTab('board');
+      }}/ >}
       <NewGameModal
         isOpen={isNewGameModalOpen}
         onClose={() => setIsNewGameModalOpen(false)}

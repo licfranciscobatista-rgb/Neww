@@ -23,23 +23,24 @@ import {
   ChevronUp,
   Cpu,
 } from 'lucide-react';
-import { PlayerProfile } from '../types/chess';
+import { PlayerProfile, GameRecord } from '../types/chess';
 import { savePlayerProfile, resetPlayerProfile, loadGameRecords } from '../storage/chessStorage';
 import { computeAssistantsDashboard } from '../engine/personalAssistants';
 import { compilePersonalEngineDNA, PersonalEngineDNAFile } from '../engine/personalDNAFile';
+import { downloadFile } from '../utils/downloadFile';
 
 interface ProfileViewProps {
+  games: GameRecord[];
   profile: PlayerProfile;
   onUpdateProfile: (profile: PlayerProfile) => void;
 }
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfile }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfile, games }) => {
   const [name, setName] = useState(profile.username);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showJsonInspector, setShowJsonInspector] = useState(false);
 
   // Load user's actual game records and compute the 8 assistants' real telemetry
-  const games = useMemo(() => loadGameRecords(), [profile.gamesPlayed]);
   const dashboard = useMemo(() => computeAssistantsDashboard(games), [games]);
 
   // Compilar el Archivo Final de ADN que alimenta al Motor Personal Soberano
@@ -50,15 +51,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
 
   const handleDownloadDNA = () => {
     const jsonString = JSON.stringify(compiledDNA, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `personal-engine-dna-${profile.username || 'jugador'}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadFile(jsonString, 'application/json', `personal-engine-dna-${profile.username || 'jugador'}.json`);
   };
 
   // Valores automáticos extraídos por los ayudantes a partir de las partidas reales del jugador
@@ -167,7 +160,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
               profile.estimatedElo ? 'text-sky-400' : 'text-slate-500'
             }`}
           >
-            {profile.estimatedElo ? `${profile.estimatedElo} Elo` : 'Sin calificar'}
+            {profile.estimatedElo ? `${profile.estimatedElo} (estimación interna)` : 'Sin calificar'}
           </span>
           <span className="text-[11px] text-slate-400">
             {profile.estimatedElo

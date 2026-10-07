@@ -6,6 +6,7 @@ import { realStockfish } from './realStockfish';
 import { realGarbo } from './realGarbo';
 import { realMaia } from './realMaia';
 import { runStockfishRecommendation } from './stockfishEngine';
+import { auditWorker } from './auditWorkers';
 import { runGarboRecommendation } from './garboEngine';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
@@ -163,43 +164,22 @@ type DirectorEvents = {
 export class ControlDirectorManager {
   private emitter = mitt<DirectorEvents>();
   private currentTab: AppTab = 'board';
-  private directorHelpRequestsCount = 1;
-  private subdirectorInterventions = 3;
+  private directorHelpRequestsCount = 0;
+  private subdirectorInterventions = 0;
   private interventionsBreakdown: EngineInterventionsBreakdown = {
-    directorHelpRequests: 1,
-    stockfishTimeouts: 2, // e.g. 2 times Stockfish exceeded 15s in deep calculation
-    garboTimeouts: 1,    // e.g. 1 time Garbo exceeded 5s
+    directorHelpRequests: 0,
+    stockfishTimeouts: 0,
+    garboTimeouts: 0,
     maiaPacingAssists: 0,// Maia is fast lightweight neural net
     personalEngineAssists: 0, // Motor personal is autonomous with its 8 assistants
   };
-  private lastInterventionNote = 'Sistema estable a 60 FPS. Sin conflictos entre Director y Sub-Director.';
-  private fps = 60;
+  private lastInterventionNote = 'Sin intervenciones registradas.';
+  private fps = 0;
 
   // Separate independent logs
-  private stockfishAuditLogs: StockfishAuditLog[] = [
-    {
-      id: 'sf_log_init',
-      gameId: 'game_init_demo',
-      plyCount: 32,
-      accuracyWhite: 88.4,
-      accuracyBlack: 81.2,
-      blundersCount: 1,
-      brilliantMovesCount: 1,
-      completedAt: new Date().toLocaleTimeString('es-ES'),
-      status: 'AUDIT_COMPLETE_ENGINE_SHUTDOWN',
-    },
-  ];
+  private stockfishAuditLogs: StockfishAuditLog[] = [];
 
-  private maiaHumanityLogs: MaiaHumanityLog[] = [
-    {
-      id: 'maia_log_init',
-      gameId: 'game_init_demo',
-      averageHumanProbability: 76.4,
-      anomaliesDetected: 0,
-      targetElo: 1100,
-      recordedAt: new Date().toLocaleTimeString('es-ES'),
-    },
-  ];
+  private maiaHumanityLogs: MaiaHumanityLog[] = [];
 
   // Memory allocations: 20MB fixed base for Stockfish (+15MB dynamic if needed up to 35MB), 15MB limit for secondary engines
   private memoryAllocations: Record<EngineType, MotorMemoryAllocation> = {
@@ -324,9 +304,14 @@ export class ControlDirectorManager {
     },
   };
 
-  private droppedFramesPrevented = 14;
+  private droppedFramesPrevented = 0;
 
   constructor() {
+    for (const engine of ['stockfish', 'garbo', 'maia'] as const) {
+      this.engineHealthChecks[engine].isOperational = false;
+      this.engineHealthChecks[engine].statusText = 'Motor real no verificado';
+      this.engineHealthChecks[engine].checksPassed = [];
+    }
     this.startFpsLoop();
   }
 
@@ -348,17 +333,13 @@ export class ControlDirectorManager {
    */
   public async scheduleZeroLagFrame<T>(task: () => T): Promise<T> {
     const t0 = performance.now();
-    return new Promise<T>((resolve) => {
+    return new Promise<T>((resolve, reject) => {
       // Si requestAnimationFrame está disponible, cedemos un frame para el render visual del tablero
       if (typeof window !== 'undefined' && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
           setTimeout(() => {
-            const res = task();
-            const elapsed = performance.now() - t0;
-            if (elapsed > 16.6) {
-              this.droppedFramesPrevented++;
-            }
-            resolve(res);
+            try { resolve(task()); }
+            catch (error) { reject(error); }
           }, 0);
         });
       } else {
@@ -631,7 +612,12 @@ export class ControlDirectorManager {
       ],
     };
 
-    this.lastInterventionNote = `Sub-Director auditó motores con éxito a las ${nowStr}. Todos operativos.`;
+    for (const engine of ['stockfish', 'garbo', 'maia'] as const) {
+      this.engineHealthChecks[engine].isOperational = false;
+      this.engineHealthChecks[engine].statusText = 'Respaldo local comprobado; motor real pendiente de verificación';
+      this.engineHealthChecks[engine].checksPassed = ['Comprobación del respaldo local, no del worker real'];
+    }
+    this.lastInterventionNote = `Comprobación local a las ${nowStr}; workers pendientes de auditoría.`;
     this.notifyTelemetry(gamesPlayedByUser);
     return { ...this.engineHealthChecks };
   }
@@ -643,13 +629,13 @@ export class ControlDirectorManager {
     this.verifyAllFourEngines(gamesPlayedByUser);
 
     try {
-      const ready = await realStockfish.init();
+      const ready = true;
       if (ready) {
-        const res = await realStockfish.analyze(
+        const res = await auditWorker('stockfish',
           'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
-          { movetime: 150 }
         );
         if (res && res.san) {
+          this.engineHealthChecks.stockfish.isOperational = true;
           this.engineHealthChecks.stockfish.version = '19.0 WASM (Worker Activo)';
           this.engineHealthChecks.stockfish.statusText = 'Instalado & Worker WASM Activo';
           this.engineHealthChecks.stockfish.checksPassed[0] = `Worker WASM Stockfish 19 verificado: respuesta UCI ${res.san} (prof. ${res.depth || 10})`;
@@ -661,13 +647,13 @@ export class ControlDirectorManager {
 
     // GarboChess real (worker JavaScript propio)
     try {
-      const garboReady = await realGarbo.init();
+      const garboReady = true;
       if (garboReady) {
-        const res = await realGarbo.analyze(
+        const res = await auditWorker('garbo',
           'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
-          { movetime: 150 }
         );
         if (res && res.san) {
+          this.engineHealthChecks.garbo.isOperational = true;
           this.engineHealthChecks.garbo.version = 'GarboChess 6.0 JS (Worker Activo)';
           this.engineHealthChecks.garbo.statusText = 'Instalado & Worker Activo';
           this.engineHealthChecks.garbo.checksPassed[0] = `Worker GarboChess verificado: ${res.san} (prof. ${res.depth})`;
@@ -682,6 +668,7 @@ export class ControlDirectorManager {
       if (await realMaia.init()) {
         const res = await realMaia.analyze('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', { selfElo: 1500 });
         if (res && res.san) {
+          this.engineHealthChecks.maia.isOperational = true;
           this.engineHealthChecks.maia.version = 'Maia 3 (red neuronal real)';
           this.engineHealthChecks.maia.statusText = 'Instalado & Modelo Activo';
           this.engineHealthChecks.maia.checksPassed[0] = `Modelo Maia 3 verificado: ${res.san} (${Math.round(res.probability * 100)}%, ${res.ms} ms)`;
@@ -749,7 +736,7 @@ export class ControlDirectorManager {
     };
 
     this.lastGameReadinessReport = report;
-    this.lastInterventionNote = `Pestaña Juego consultó Control al iniciar (${latencyMs} ms) • 4 Motores OK.`;
+    this.lastInterventionNote = report.message;
     this.notifyTelemetry(gamesPlayedByUser);
 
     return report;

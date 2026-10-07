@@ -12,13 +12,15 @@ import { evaluateMovesStockfish, runStockfishRecommendation } from './stockfishE
 import { realStockfish } from './realStockfish';
 import { realGarbo, RealGarboAnalysis } from './realGarbo';
 import { realMaia, RealMaiaAnalysis } from './realMaia';
-import { runGarboRecommendation } from './garboEngine';
+import { analyzeGarbo } from './garboEngine';
+import type { OpeningChoice } from './openingIndex';
 import { runMaiaRecommendation } from './maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
 import { runChessJsRecommendation } from './chessjsEngine';
 import { controlDirector, subDirector } from './controlDirector';
 import { loadGameRecords } from '../storage/chessStorage';
 import { distillBookMove } from './theoryBook';
+import { estimateThinkingTime } from './thinkingTime';
 
 export interface SupervisorState {
   gameId: string;
@@ -29,6 +31,8 @@ export interface SupervisorState {
   stockfishMode: StockfishOperatingMode;
   stockfishRemainingUses: number;
   garboRemainingUses: number;
+  garboOpening?: string;
+  garboOpeningState?: OpeningChoice;
   stockfishRequestedThisTurn: boolean;
   garboRequestedThisTurn: boolean;
   recommendations: Record<EngineType, EngineRecommendation | null>;
@@ -121,6 +125,7 @@ export class ChessSupervisor {
       stockfishMode: initialMode,
       stockfishRemainingUses: 3,
       garboRemainingUses: 5,
+      garboOpening: typeof localStorage !== 'undefined' ? localStorage.getItem('jugada_garbo_opening') || 'free' : 'free',
       stockfishRequestedThisTurn: false,
       garboRequestedThisTurn: false,
       recommendations: {
@@ -147,6 +152,43 @@ export class ChessSupervisor {
 
   public getState(): SupervisorState {
     return this.state;
+  }
+
+  public setGarboOpening(selected: string, chess: Chess): void {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('jugada_garbo_opening', selected);
+    this.state.garboOpening = selected;
+    this.state.recommendations.garbo = null;
+    this.state.garboOpeningState = undefined;
+    this.state.candidateArrows = this.state.candidateArrows.filter(a => !isGarboArrow(a));
+    this.state.loadingStates.garbo = true;
+    this.onStateChange({ ...this.state });
+    void this.updateGarbo(chess, this.state.generation, selected);
+  }
+
+  private async updateGarbo(chess: Chess, generation: number, selected: string): Promise<void> {
+    const fen = chess.fen();
+    try {
+      const result = await analyzeGarbo(chess, selected);
+      if (this.state.generation !== generation || this.state.garboOpening !== selected ||
+          this.state.fen !== fen || this.state.isGameOver) return;
+      const arrows = this.state.candidateArrows.filter(a => !isGarboArrow(a));
+      if (result.rec && !this.shouldSuppressArrows(fen)) arrows.push({
+        from: result.rec.from, to: result.rec.to, label: `GB • ${result.rec.evalDisplay}`,
+        san: result.rec.san, color: '#059669',
+      });
+      const recommendations = { ...this.state.recommendations, garbo: result.rec };
+      this.state = { ...this.state, recommendations, candidateArrows: arrows,
+        garboOpeningState: result.opening, loadingStates: { ...this.state.loadingStates, garbo: false },
+        agreements: this.computeAgreements(recommendations) };
+      this.onStateChange({ ...this.state });
+    } catch {
+      if (this.state.generation !== generation || this.state.garboOpening !== selected) return;
+      this.state.recommendations = { ...this.state.recommendations, garbo: null };
+      this.state.candidateArrows = this.state.candidateArrows.filter(a => !isGarboArrow(a));
+      this.state.loadingStates.garbo = false;
+      this.state.garboOpeningState = { status: 'unavailable', notice: 'Garbo en pausa: no se pudo verificar la posición.' };
+      this.onStateChange({ ...this.state });
+    }
   }
 
   public setStockfishMode(mode: StockfishOperatingMode, chess?: Chess): void {
@@ -312,9 +354,13 @@ export class ChessSupervisor {
     if (chess.isGameOver()) {
       this.state = {
         ...this.state,
+        generation: this.state.generation + 1,
         fen,
         isGameOver: true,
         candidateArrows: [],
+        agreements: [],
+        loadingStates: { stockfish: false, garbo: false, maia: false, personal: false, chessjs: false },
+        garboOpeningState: undefined,
         thinkingTime: null,
         stockfishRequestedThisTurn: false,
         garboRequestedThisTurn: false,
@@ -339,39 +385,7 @@ export class ChessSupervisor {
     const positionId = `${gameId}_${generation}`;
 
     // Compute Thinking Time
-    const legalMoves = chess.moves({ verbose: true });
-    let complexityScore = 4;
-    let urgency: 'low' | 'medium' | 'high' | 'critical' = 'medium';
-
-    if (chess.inCheck()) {
-      complexityScore = 8;
-      urgency = 'high';
-    } else if (legalMoves.some((m) => m.captured)) {
-      complexityScore = 6;
-      urgency = 'medium';
-    } else if (legalMoves.length > 30) {
-      complexityScore = 7;
-      urgency = 'medium';
-    } else if (clockRemainingSeconds < 60 && clockRemainingSeconds > 0) {
-      urgency = 'critical';
-    }
-
-    const recommendedSeconds = Math.max(
-      3,
-      Math.min(45, Math.round((complexityScore / 5) * (clockRemainingSeconds > 0 ? clockRemainingSeconds / 40 : 15)))
-    );
-
-    const thinkingTime: ThinkingTimeEstimate = {
-      recommendedSeconds,
-      urgency,
-      complexityScore,
-      reasoning:
-        complexityScore > 7
-          ? 'Posición táctica compleja con amenazas activas: calcula variantes forzadas.'
-          : complexityScore > 5
-          ? 'Tensión de piezas en el centro: evalúa cambios favorables antes de definir.'
-          : 'Fase de maniobra posicional: desarrolla armoniosamente.',
-    };
+    const thinkingTime = estimateThinkingTime(chess, storedGames, clockRemainingSeconds);
 
     // Optimización crítica para tablet de 3GB:
     // Si las flechas deben suprimirse (ej. turno del rival en modo solo mi turno, o líneas desactivadas),
@@ -428,7 +442,7 @@ export class ChessSupervisor {
 
       // 2. GarboChess: Recomendación Teórica Posicional
       const garboStart = performance.now();
-      const garboRec = runGarboRecommendation(chess);
+      const garboRec = null as EngineRecommendation | null;
       controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
 
       // 3. Maia: Recomendación Teórica Humana
@@ -572,7 +586,7 @@ export class ChessSupervisor {
         },
         loadingStates: {
           stockfish: false,
-          garbo: false,
+          garbo: true,
           maia: false,
           personal: false,
           chessjs: false,
@@ -580,6 +594,7 @@ export class ChessSupervisor {
       };
 
       this.onStateChange(this.state);
+      void this.updateGarbo(chess, generation, this.state.garboOpening || 'auto');
     });
 
     // Refinar de forma asíncrona con Stockfish 19 WASM real solo en el turno del jugador (180ms)
@@ -848,65 +863,10 @@ export class ChessSupervisor {
   }
 
   public async requestGarboUse(chess: Chess): Promise<void> {
-    if (this.state.garboRemainingUses <= 0) return;
-
+    if (this.state.loadingStates.garbo || this.state.isGameOver) return;
     this.state.loadingStates.garbo = true;
     this.onStateChange({ ...this.state });
-
-    const startTime = performance.now();
-    const remaining = this.state.garboRemainingUses - 1;
-    const generationAtRequest = this.state.generation;
-
-    let rec: EngineRecommendation | null = null;
-    try {
-      const real = await realGarbo.analyze(chess.fen(), { movetime: 800 });
-      if (real) rec = garboRecommendationFromReal(real, chess, 'GarboChess (a demanda)');
-    } catch {
-      // se usa la heurística de respaldo
-    }
-    if (!rec) rec = runGarboRecommendation(chess);
-    const duration = performance.now() - startTime;
-
-    controlDirector.watchEngineExecution('garbo', duration);
-
-    // Mientras el motor pensaba se jugó otra jugada: solo se descuenta el uso, sin mostrar una flecha vieja
-    if (this.state.generation !== generationAtRequest) {
-      this.state = {
-        ...this.state,
-        garboRemainingUses: remaining,
-        loadingStates: { ...this.state.loadingStates, garbo: false },
-      };
-      this.onStateChange(this.state);
-      return;
-    }
-
-    // Add arrow if not already present
-    const updatedArrows = [...this.state.candidateArrows];
-    if (rec && rec.move && !updatedArrows.some((a) => a.from === rec.from && a.to === rec.to)) {
-      updatedArrows.push({
-        from: rec.from,
-        to: rec.to,
-        label: `GarboChess (${rec.evalDisplay})`,
-        san: rec.san,
-        color: '#34d399',
-      });
-    }
-
-    this.state = {
-      ...this.state,
-      garboRemainingUses: remaining,
-      garboRequestedThisTurn: true,
-      candidateArrows: updatedArrows,
-      recommendations: {
-        ...this.state.recommendations,
-        garbo: rec,
-      },
-      loadingStates: {
-        ...this.state.loadingStates,
-        garbo: false,
-      },
-    };
-    this.onStateChange(this.state);
+    await this.updateGarbo(chess, this.state.generation, this.state.garboOpening || 'auto');
   }
 }
 

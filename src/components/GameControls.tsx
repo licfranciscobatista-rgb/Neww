@@ -12,6 +12,7 @@ import {
   Brain,
   Share2,
   Flag,
+  Pencil,
 } from 'lucide-react';
 import { PlayerProfile } from '../types/chess';
 import { evaluateHumanityVerdict, HumanityVerdictResult } from '../engine/humanityVerdict';
@@ -22,6 +23,7 @@ interface GameControlsProps {
   boardOrientation: 'w' | 'b';
   onFlipBoard: () => void;
   onNewGame: () => void;
+  onEditPosition?: () => void;
   onResetPosition: () => void;
   onUndoMove?: () => void;
   canUndo?: boolean;
@@ -38,6 +40,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
   boardOrientation,
   onFlipBoard,
   onNewGame,
+  onEditPosition,
   onResetPosition,
   onUndoMove,
   canUndo = false,
@@ -60,7 +63,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
     if (history.length === 0) return;
     const last = history[history.length - 1];
 
-    const temp = new Chess();
+    const temp = new Chess(history[0].before);
     for (let i = 0; i < history.length - 1; i++) {
       temp.move(history[i].san);
     }
@@ -68,7 +71,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
 
     const verdict = evaluateHumanityVerdict(
       fenBefore,
-      `${last.from}${last.to}`,
+      `${last.from}${last.to}${last.promotion || ''}`,
       last.san,
       profile
     );
@@ -78,7 +81,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
 
   return (
     <div className="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <button
           onClick={onNewGame}
           className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all text-xs"
@@ -86,6 +89,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <Plus className="w-3.5 h-3.5" />
           <span>Nueva Partida</span>
         </button>
+        {onEditPosition && <button type="button" onClick={onEditPosition} title="Ajustar tablero" className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-1"><Pencil size={14}/><span>Ajustar tablero</span></button>}
 
         <button
           onClick={onFlipBoard}

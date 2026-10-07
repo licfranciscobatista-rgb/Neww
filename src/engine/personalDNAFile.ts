@@ -80,7 +80,7 @@ export function compilePersonalEngineDNA(
 ): PersonalEngineDNAFile {
   const graph = PlayerGraphSubEngine.buildGraph(games);
   const styleProfile = StyleAssistant.getStyleProfile(distilled);
-  const isCalibrated = games.length >= 10;
+  const isCalibrated = distilled.manualGamesCount >= 10;
 
   // Calcular victorias medias en nodos conocidos del árbol
   let totalKnownWins = 0;
@@ -89,12 +89,12 @@ export function compilePersonalEngineDNA(
     totalKnownVisits += node.playCount;
     totalKnownWins += node.wins;
   }
-  const avgWinRate = totalKnownVisits > 0 ? `${Math.round((totalKnownWins / totalKnownVisits) * 100)}%` : '50%';
+  const avgWinRate = totalKnownVisits > 0 ? `${Math.round((totalKnownWins / totalKnownVisits) * 100)}%` : 'Sin datos';
 
   const topOpeningsCompiled = (distilled.topOpenings || []).slice(0, 5).map((o: any) => ({
     openingName: o.name || 'Variante Propia',
     movesCount: o.firstMoves ? o.firstMoves.length : 4,
-    winRate: `${Math.round(o.winRate || 50)}%`,
+    winRate: `${Math.round(o.winRate ?? 0)}%`,
   }));
 
   const rawBytes = distilled.rawPgnBytes || 1;
@@ -167,9 +167,9 @@ export function compilePersonalEngineDNA(
     },
     engineReadiness: {
       isFullyCalibrated: isCalibrated,
-      calibrationProgress: `${games.length}/10 partidas (${Math.min(100, Math.round((games.length / 10) * 100))}%)`,
-      activeInBoard: isCalibrated,
-      operationalMode: isCalibrated ? 'SOVEREIGN_EXECUTION' : 'CALIBRATION_STANDBY',
+      calibrationProgress: `${distilled.manualGamesCount}/10 partidas (${Math.min(100, Math.round((distilled.manualGamesCount / 10) * 100))}%)`,
+      activeInBoard: distilled.manualGamesCount > 0,
+      operationalMode: distilled.manualGamesCount > 0 ? 'SOVEREIGN_EXECUTION' : 'CALIBRATION_STANDBY',
     },
   };
 }

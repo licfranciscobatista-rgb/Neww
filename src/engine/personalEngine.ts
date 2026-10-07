@@ -277,7 +277,7 @@ export interface PersonalRecommendationParams {
 export function runPersonalRecommendation(
   params: PersonalRecommendationParams
 ): EngineRecommendation | null {
-  const { chess, profile, games, timeRemainingSeconds = null, stockfishMoveSan = undefined } = params as any;
+  const { chess, profile, games, timeRemainingSeconds = null, stockfishMoveSan = undefined } = params;
 
   if (!chess) return null;
 

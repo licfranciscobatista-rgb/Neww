@@ -191,7 +191,7 @@ export const saveProfile = savePlayerProfile;
 
 export function resetPlayerProfile(): PlayerProfile {
   inMemoryProfileCache = DEFAULT_PROFILE;
-  inMemoryGamesCache = [];
+  inMemoryGamesCache = null;
   inMemoryGamesHash = '';
   savePlayerProfile(DEFAULT_PROFILE);
   return DEFAULT_PROFILE;
@@ -231,8 +231,11 @@ export function saveGameRecord(record: GameRecord): PlayerProfile {
         to: m.to,
         uci: m.uci || `${m.from}${m.to}`,
         source: m.source || 'MANUAL',
-        thinkTime: m.thinkTime || 10,
-        timestamp: m.timestamp || Date.now(),
+        thinkTime: m.thinkTime,
+        timingMeasured: m.timingMeasured,
+        fenBefore: m.fenBefore,
+        fenAfter: m.fenAfter,
+        timestamp: m.timestamp ?? Date.now(),
       })),
     };
 
@@ -261,6 +264,7 @@ export function deleteGameRecord(id: string): void {
     const updated = games.filter((g) => g.id !== id);
     inMemoryGamesCache = updated;
     localStorage.setItem(GAMES_KEY, JSON.stringify(updated));
+    localStorage.setItem(REPORTS_KEY, JSON.stringify(loadAnalysisReports().filter(report => report.gameId !== id)));
 
     const baseProfile = inMemoryProfileCache || DEFAULT_PROFILE;
     const recomputed = computeProfileFromGames(updated, baseProfile);

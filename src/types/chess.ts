@@ -67,6 +67,7 @@ export interface GameMove {
   moveNumber?: number;
   source: MoveSource;
   thinkTime?: number;
+  timingMeasured?: boolean;
   fenBefore?: string;
   fenAfter?: string;
   clockRemainingWhite?: number;
@@ -194,6 +195,8 @@ export interface PlayerProfile {
 }
 
 export interface ThinkingTimeEstimate {
+  basis?: 'Tu ritmo' | 'Estimación';
+  sampleCount?: number;
   recommendedSeconds: number;
   urgency: 'low' | 'medium' | 'high' | 'critical';
   complexityScore: number;

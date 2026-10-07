@@ -11,6 +11,7 @@ export interface NewGameOptions {
   timeControlSeconds: number;
   showLinesMode: ShowLinesMode;
   stockfishMode: StockfishOperatingMode;
+  startingFen?: string;
 }
 
 interface NewGameModalProps {
@@ -59,7 +60,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 text-slate-200 relative">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full max-h-[90dvh] overflow-y-auto p-6 shadow-2xl space-y-5 text-slate-200 relative">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold">
@@ -324,36 +325,18 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="text-xs font-bold text-white">
-                Sub-Director: Partida Certificada & Protegida
+                Sub-Director: Diagnóstico de motores
               </span>
             </div>
             <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-              100% OPERATIVO
+              VERIFICAR EN CONTROL
             </span>
           </div>
 
           <p className="text-[10px] text-slate-300 leading-snug">
-            Archivos de motores comprobados. Stockfish cuenta con respaldo instantáneo; ni Garbo, ni Maia, ni el Motor Personal pueden fallar ni detener tu partida.
+            El resultado de las pruebas operativas se consulta en Control. No garantiza ausencia de fallos durante la partida.
           </p>
 
-          <div className="grid grid-cols-4 gap-1.5 pt-1 text-[10px] font-mono">
-            <div className="p-1 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-              <span>SF 19</span>
-              <span className="text-emerald-400 font-bold">✓ OK</span>
-            </div>
-            <div className="p-1 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-              <span>Garbo</span>
-              <span className="text-emerald-400 font-bold">✓ OK</span>
-            </div>
-            <div className="p-1 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-              <span>Maia</span>
-              <span className="text-emerald-400 font-bold">✓ OK</span>
-            </div>
-            <div className="p-1 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-              <span>Personal</span>
-              <span className="text-emerald-400 font-bold">✓ OK</span>
-            </div>
-          </div>
         </div>
 
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-400 flex items-start gap-2">

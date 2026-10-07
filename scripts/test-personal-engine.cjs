@@ -1,15 +1,6 @@
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
-const ts = require('typescript');
-require.extensions['.ts'] = (module, filename) => {
-  const source = fs.readFileSync(filename, 'utf8');
-  const result = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    reportDiagnostics: true,
-  });
-  assert.equal((result.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error).length, 0);
-  module._compile(result.outputText, filename);
-};
+require('tsx/cjs');
 const { Chess } = require('chess.js');
 const { HistoryAssistant } = require('../src/engine/personalAssistants.ts');
 const { PlayerGraphSubEngine, BlunderShieldSubEngine } = require('../src/engine/personalSubEngines.ts');

@@ -1,101 +1,76 @@
 import { Chess } from 'chess.js';
-import { EngineRecommendation } from '../types/chess';
-import { evaluateMovesStockfish, ScoredMove } from './stockfishEngine';
-import { distillBookMove } from './theoryBook';
+import type { EngineRecommendation } from '../types/chess';
+import { getReliableTheoryMoves } from './theoryBook';
+import { realGarbo } from './realGarbo';
+import { queryOpening } from './openingService';
+import { OPENING_PRESETS, shouldPauseGarbo, type OpeningChoice } from './openingIndex';
 
-/**
- * GarboChess classical positional evaluator.
- * Prefers harmonious piece development, king safety (castling), center pawns,
- * and penalizes premature queen wanderings or repeated piece moves.
- */
-function scorePositionalGarbo(san: string, to: string, baseScore: number, historyPlies: number): number {
-  let bonus = 0;
-
-  // 1. Castling king safety (classical Garbo principle)
-  if (san === 'O-O' || san === 'O-O-O') {
-    bonus += 40;
-  }
-
-  // 2. Center pawn control (e4, d4, c4, e5, d5, c5)
-  if (['e4', 'd4', 'c4', 'e5', 'd5', 'c5'].includes(to)) {
-    bonus += 25;
-  }
-
-  // 3. Knight and Bishop harmonious development towards center
-  if (['Nf3', 'Nc3', 'Nf6', 'Nc6', 'Bc4', 'Bb5', 'Be2', 'Bd3', 'Bf4', 'Bc5', 'Bb4', 'Be7', 'Bd6'].includes(san)) {
-    bonus += 30;
-  }
-
-  // 4. Discourage premature Queen maneuvers in the opening (first 10 moves)
-  if (historyPlies < 16 && san.startsWith('Q') && !san.includes('x')) {
-    bonus -= 35;
-  }
-
-  // 5. Prefer solid pawn consolidation over tactical skirmishes
-  if (san.length === 2 && ['e3', 'd3', 'c3', 'e6', 'd6', 'c6'].includes(san)) {
-    bonus += 15;
-  }
-
-  return baseScore + bonus;
-}
-
-export function runGarboRecommendation(
-  chess: Chess,
-  stockfishBest?: ScoredMove
-): EngineRecommendation | null {
-  const candidates = evaluateMovesStockfish(chess, 2);
-  if (candidates.length === 0) return null;
-
-  const top = stockfishBest || candidates[0];
-  const historyPlies = chess.history().length;
-
-  // Evaluate candidate moves with Garbo's positional heuristic
-  // Only consider moves within tactical safety tolerance (<= 120 centipawns of top move)
-  const safeMoves = candidates.filter((c) => Math.abs(top.score - c.score) <= 120);
-  const pool = safeMoves.length > 0 ? safeMoves : [candidates[0]];
-
-  // Sort pool by Garbo positional score
-  const garboScored = pool.map((m) => ({
-    ...m,
-    garboScore: scorePositionalGarbo(m.san, m.to, m.score, historyPlies),
-  }));
-  garboScored.sort((a, b) => b.garboScore - a.garboScore);
-
-  const choice = garboScored[0];
-  const evalInPawns = (choice.score / 100).toFixed(2);
-  const evalDisplay = choice.score >= 0 ? `+${evalInPawns}` : evalInPawns;
-
-  // DESTILADOR DE JUGADAS DE LIBRO:
-  // Detecta con honestidad si la jugada pertenece a la teoría de aperturas ECO conocida.
-  // Si es de libro, se etiqueta como Jugada de Libro y no como cálculo propio de Garbo.
-  const bookDistillation = distillBookMove(chess, choice.san);
-
-  let explanation: string;
-  if (bookDistillation.isBook) {
-    explanation = `📖 Jugada de Libro (${bookDistillation.openingName} - ECO ${bookDistillation.eco}): estándar teórico universal de apertura que cualquier jugador o motor realiza por memoria de aperturas.`;
-  } else {
-    const isSharedWithStockfish = choice.move === top.move;
-    explanation = isSharedWithStockfish
-      ? `Línea clásica posicional (coincide con Stockfish en el óptimo táctico: ${evalDisplay}).`
-      : `Alternativa posicional GarboChess: desarrollo armónico y control estructural (${evalDisplay}).`;
-  }
-
+// Independent fallback for synchronous engine health checks, not live recommendations.
+export function runGarboRecommendation(chess: Chess): EngineRecommendation | null {
+  const moves = chess.moves({ verbose: true });
+  const book = getReliableTheoryMoves(chess);
+  const chosen = moves.find(move => move.san.includes('#')) ||
+    moves.find(move => book.includes(move.san)) || moves[0];
+  if (!chosen) return null;
   return {
-    engine: 'garbo',
-    engineName: bookDistillation.isBook ? 'Libro ECO / Garbo' : 'GarboChess',
-    move: choice.move,
-    from: choice.from,
-    to: choice.to,
-    san: choice.san,
-    evaluation: choice.score,
-    evalDisplay: `${evalDisplay} peones`,
-    confidence: bookDistillation.isBook ? 99 : 88,
-    isBookMove: bookDistillation.isBook,
-    bookOpeningName: bookDistillation.isBook ? bookDistillation.openingName : undefined,
-    explanation,
-    color: '#059669', // Emerald Green
-    timeTakenMs: 18,
-    timestamp: Date.now(),
+    engine: 'garbo', engineName: 'GarboChess',
+    move: chosen.from + chosen.to + (chosen.promotion || ''), from: chosen.from, to: chosen.to,
+    san: chosen.san, evaluation: 0, evalDisplay: '—', explanation: '', color: '#059669',
   };
 }
 
+export async function analyzeGarbo(chess: Chess, selected: string): Promise<{
+  rec: EngineRecommendation | null; opening: OpeningChoice;
+}> {
+  const fen = chess.fen();
+  const history = chess.history({ verbose: true }).map(move => move.after);
+  const opening = await queryOpening(fen, selected, history);
+  const system = OPENING_PRESETS.find(item => item.id === selected)?.name || opening.name || 'el sistema elegido';
+  if (shouldPauseGarbo(selected, opening)) {
+    opening.notice = opening.status === 'unavailable'
+      ? `${system} en pausa: repertorio no disponible.`
+      : `${system} en pausa: sin continuación reconocida.`;
+    if (opening.status !== 'unavailable') {
+      for (const preset of OPENING_PRESETS) {
+        if (preset.id === selected) continue;
+        const alternative = await queryOpening(fen, preset.id, history);
+        if (!alternative.uci) continue;
+        try {
+          new Chess(fen).move({ from: alternative.uci.slice(0, 2), to: alternative.uci.slice(2, 4), promotion: alternative.uci[4] });
+          opening.suggestedSystem = { id: preset.id, name: preset.name };
+          break;
+        } catch { /* Only propose a system with a legal continuation here. */ }
+      }
+    }
+    return { opening, rec: null };
+  }
+  if (opening.uci) {
+    try {
+      const board = new Chess(fen);
+      const move = board.move({ from: opening.uci.slice(0, 2), to: opening.uci.slice(2, 4), promotion: opening.uci[4] });
+      return { opening, rec: {
+        engine: 'garbo', engineName: 'GarboChess', move: opening.uci,
+        from: move.from, to: move.to, san: move.san, evaluation: 0, evalDisplay: opening.eco || 'Libro',
+        isBookMove: true, bookOpeningName: opening.name, explanation: '', color: '#059669',
+      } };
+    } catch {
+      if (selected !== 'free' && selected !== 'auto') {
+        opening.status = 'unavailable';
+        opening.notice = `${system} en pausa: continuación no válida.`;
+        return { opening, rec: null };
+      }
+    }
+  }
+  const real = await realGarbo.analyze(fen, { movetime: 300 });
+  if (!real) opening.notice = 'Garbo no pudo analizar esta posición. No hay recomendación verificada.';
+  else if (real.mate !== undefined && real.mate < 0) {
+    opening.notice = `Garbo detecta mate en contra en su línea (${Math.abs(real.mate)}). Prioridad: defender el rey.`;
+  } else if (new Chess(fen).isCheck()) {
+    opening.notice = 'El rey está en jaque. La recomendación responde al jaque; el sistema queda en pausa.';
+  }
+  return { opening, rec: real ? {
+    engine: 'garbo', engineName: 'GarboChess', move: real.uci, from: real.from, to: real.to,
+    san: real.san, evaluation: real.scoreCp / 100, evalDisplay: real.evalDisplay,
+    depth: real.depth, isBookMove: false, explanation: '', color: '#059669',
+  } : null };
+}

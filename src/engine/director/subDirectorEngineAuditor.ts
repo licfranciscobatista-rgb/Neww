@@ -9,6 +9,7 @@ import { Chess } from 'chess.js';
 import { EngineType } from '../../types/chess';
 import { runStockfishRecommendation } from '../stockfishEngine';
 import { realStockfish } from '../realStockfish';
+import { auditWorker } from '../auditWorkers';
 import { runGarboRecommendation } from '../garboEngine';
 import { runMaiaRecommendation } from '../maiaEngine';
 import { runPersonalRecommendation, getPersonalEngineStatus } from '../personalEngine';
@@ -132,17 +133,18 @@ class SubDirectorEngineAuditorManager {
     }
 
     const t0 = performance.now();
-    let verified = true;
-    let sizeOrNote = 'Copia local embebida confirmada (Zero-Lag)';
+    let verified = false;
+    let sizeOrNote = 'Archivo no verificado';
     let status: EngineFileCheckDetail['status'] = 'EMBEDDED_COPY_VERIFIED';
 
     if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60);
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
         const resp = await fetch(path, { method: 'HEAD', cache: 'force-cache', signal: controller.signal });
         clearTimeout(timeoutId);
-        if (resp.ok) {
+        if (resp.ok && !resp.headers.get('content-type')?.includes('text/html')) {
+          verified = true;
           status = 'FOUND_AND_VALID';
           const len = resp.headers.get('content-length');
           if (len) {
@@ -166,7 +168,7 @@ class SubDirectorEngineAuditorManager {
       sizeOrNote,
       latencyMs: latency,
     };
-    this.fileCache.set(path, result);
+    if (verified) this.fileCache.set(path, result);
     return result;
   }
 
@@ -176,13 +178,11 @@ class SubDirectorEngineAuditorManager {
    * arrancará con 100% de fluidez y cero errores en los motores.
    */
   public async auditAndCertifyEngines(gamesPlayedByUser = 0): Promise<SubDirectorPreflightResult> {
-    if (this.lastReport) {
-      return this.lastReport;
-    }
     if (this.isAuditing) {
       return this.getOrRunCertification(gamesPlayedByUser);
     }
     this.isAuditing = true;
+    try {
 
     const testChess = new Chess('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3');
     const profile = loadPlayerProfile();
@@ -197,9 +197,10 @@ class SubDirectorEngineAuditorManager {
     }
 
     const sfT0 = performance.now();
-    let sfRec = runStockfishRecommendation(testChess);
+    const sfResult = await auditWorker('stockfish', testChess.fen());
+    const sfRec = sfResult ? { ...sfResult, move: sfResult.uci } : null;
     const sfLatency = Number((performance.now() - sfT0).toFixed(1));
-    const wasmActive = realStockfish.isReady();
+    const wasmActive = !!sfRec;
 
     const stockfishReport: EngineAuditReport = {
       engine: 'stockfish',
@@ -209,13 +210,13 @@ class SubDirectorEngineAuditorManager {
       calculationTested: !!(sfRec && sfRec.move),
       testMoveSan: sfRec?.san || 'Bc4',
       testLatencyMs: sfLatency,
-      isOperational: true,
-      hasGuaranteedFallback: true,
+      isOperational: !!sfRec,
+      hasGuaranteedFallback: false,
       activeMode: wasmActive ? 'WASM_WORKER' : 'NEGAMAX_MASTER',
-      statusBadge: 'CERTIFICADO',
+      statusBadge: sfRec ? 'OPERATIVO' : 'EN_CALIBRACION',
       diagnosticNote: wasmActive
         ? `Worker WebAssembly activo y respondiendo (${sfRec?.san || 'N/A'}, eval: ${sfRec?.evalDisplay || '0.0'}).`
-        : `Evaluador Maestro Negamax + PeSTO activo (<3ms). Cero cuelgues garantizados por el Sub-Director.`,
+        : 'El worker real de Stockfish no respondió a la prueba.',
     };
 
     // --- 2. AUDITORÍA DE GARBOCHESS ---
@@ -225,22 +226,23 @@ class SubDirectorEngineAuditorManager {
       garboFiles.push(res);
     }
     const garboT0 = performance.now();
-    const garboRec = runGarboRecommendation(testChess);
+    const garboResult = await auditWorker('garbo', testChess.fen());
+    const garboRec = garboResult ? { ...garboResult, move: garboResult.uci } : null;
     const garboLatency = Number((performance.now() - garboT0).toFixed(1));
 
     const garboReport: EngineAuditReport = {
       engine: 'garbo',
       name: 'GarboChess',
-      version: '3.0 Posicional',
+      version: 'GarboChess JS Worker',
       filesVerified: garboFiles,
       calculationTested: !!(garboRec && garboRec.move),
       testMoveSan: garboRec?.san || 'Bc4',
       testLatencyMs: garboLatency,
-      isOperational: true,
-      hasGuaranteedFallback: true,
+      isOperational: !!garboRec,
+      hasGuaranteedFallback: false,
       activeMode: 'CLASSICAL_HEURISTIC',
-      statusBadge: 'CERTIFICADO',
-      diagnosticNote: `Heurística de desarrollo y control de centro verificada (${garboRec?.san || 'N/A'}). Límite Subdirector: 5s.`,
+      statusBadge: garboRec ? 'OPERATIVO' : 'EN_CALIBRACION',
+      diagnosticNote: garboRec ? `Worker real respondió: ${garboRec.san}. No verifica la calidad estratégica del sistema.` : 'El worker real de Garbo no respondió a la prueba.',
     };
 
     // --- 3. AUDITORÍA DE MAIA 3 ---
@@ -265,7 +267,7 @@ class SubDirectorEngineAuditorManager {
       hasGuaranteedFallback: true,
       activeMode: 'NEURAL_ELO',
       statusBadge: 'CERTIFICADO',
-      diagnosticNote: `Red neuronal humana verificada para nivel Elo ${profile.maiaEloCalibration || 1100} (${maiaRec?.san || 'N/A'}).`,
+      diagnosticNote: `Respaldo local de Maia comprobado (${maiaRec?.san || 'N/A'}); esta prueba no verifica los pesos neuronales.`,
     };
 
     // --- 4. AUDITORÍA DE MOTOR PERSONAL ---
@@ -356,10 +358,10 @@ class SubDirectorEngineAuditorManager {
 
     const result: SubDirectorPreflightResult = {
       certifiedTimestamp: new Date().toLocaleTimeString('es-ES'),
-      readyToPlay: true,
-      zeroCrashGuarantee: true,
-      overallHealthScore: 100,
-      allFilesAccessible: true,
+      readyToPlay: !!sfRec && !!garboRec && allAssistantsHealthy,
+      zeroCrashGuarantee: false,
+      overallHealthScore: Math.round([!!sfRec, !!garboRec, allAssistantsHealthy, !!cjsRec].filter(Boolean).length / 4 * 100),
+      allFilesAccessible: [...sfFiles, ...garboFiles, ...maiaFiles, ...personalFiles, ...bookFiles].every(file => file.verified),
       engines: {
         stockfish: stockfishReport,
         garbo: garboReport,
@@ -369,12 +371,12 @@ class SubDirectorEngineAuditorManager {
         book: bookReport,
       },
       directorDelegationNote:
-        'El Sub-Director ha comprobado los archivos físicos y ejecutado micro-pruebas reales. Todos los motores están certificados. Garantía de continuidad activa: si cualquier motor tuviera un retardo, el respaldo maestro asume el cálculo sin interrupciones.',
+        'Resultados de pruebas puntuales; no garantizan ausencia de fallos ni calidad de las jugadas.',
     };
 
     this.lastReport = result;
-    this.isAuditing = false;
     return result;
+    } finally { this.isAuditing = false; }
   }
 
   /**
@@ -385,17 +387,17 @@ class SubDirectorEngineAuditorManager {
       return this.lastReport;
     }
     // Si no hay reporte previo, disparar en segundo plano y devolver estado garantizado
-    void this.auditAndCertifyEngines(gamesPlayedByUser);
+    if (!this.isAuditing) void this.auditAndCertifyEngines(gamesPlayedByUser).catch(error => console.warn('[Audit]', error));
 
     const testChess = new Chess();
     const sfRec = runStockfishRecommendation(testChess);
 
-    return {
+    const pending: SubDirectorPreflightResult = {
       certifiedTimestamp: new Date().toLocaleTimeString('es-ES'),
-      readyToPlay: true,
-      zeroCrashGuarantee: true,
-      overallHealthScore: 100,
-      allFilesAccessible: true,
+      readyToPlay: false,
+      zeroCrashGuarantee: false,
+      overallHealthScore: 0,
+      allFilesAccessible: false,
       engines: {
         stockfish: {
           engine: 'stockfish',
@@ -482,8 +484,17 @@ class SubDirectorEngineAuditorManager {
           diagnosticNote: 'Libro de aperturas activo.',
         },
       },
-      directorDelegationNote: 'Pre-vuelo garantizado por el Sub-Director.',
+      directorDelegationNote: 'Auditoría pendiente de resultados.',
     };
+    for (const report of Object.values(pending.engines)) {
+      report.isOperational = false;
+      report.calculationTested = false;
+      report.hasGuaranteedFallback = false;
+      report.statusBadge = 'EN_CALIBRACION';
+      report.testMoveSan = '';
+      report.diagnosticNote = 'Pendiente de verificación.';
+    }
+    return pending;
   }
 }
 

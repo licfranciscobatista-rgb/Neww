@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { GameRecord } from '../types/chess';
 import { saveGameRecord, deleteGameRecord } from '../storage/chessStorage';
+import { downloadFile } from '../utils/downloadFile';
 
 interface HistoryViewProps {
   games: GameRecord[];
@@ -40,13 +41,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   });
 
   const handleExportPgn = (game: GameRecord) => {
-    const blob = new Blob([game.pgn], { type: 'application/x-chess-pgn' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${game.title.replace(/\s+/g, '_')}.pgn`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(game.pgn, 'application/x-chess-pgn', `${game.title.replace(/\s+/g, '_')}.pgn`);
   };
 
   const handleDelete = (id: string) => {
@@ -74,7 +69,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         title: chess.header().Event || 'Partida Importada PGN',
         playerColor: 'w',
         result: chess.header().Result || '*',
-        openingEco: chess.header().ECO || 'B00',
+        openingEco: chess.header().ECO || undefined,
         openingName: chess.header().Opening || 'Apertura Importada',
         movesCount: history.length,
         moves: history.map((m, idx) => ({
@@ -83,7 +78,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           san: m.san,
           from: m.from,
           to: m.to,
-          uci: `${m.from}${m.to}`,
+          uci: `${m.from}${m.to}${m.promotion || ''}`,
+          fenBefore: m.before,
+          fenAfter: m.after,
           source: 'MANUAL',
           timestamp: Date.now(),
         })),
@@ -265,7 +262,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <button
                   onClick={() => onAnalyzeGame(game)}
                   className="px-2.5 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-600/40 rounded-lg font-bold flex items-center gap-1 transition-colors text-[11px]"
-                  title="Ver métricas y rendimiento en Control"
+                  title="Ver métricas y rendimiento"
                 >
                   <BarChart3 className="w-3.5 h-3.5" />
                   <span>Métricas</span>

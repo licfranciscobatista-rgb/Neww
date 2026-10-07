@@ -30,8 +30,11 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
   const currentTurn = chess.turn();
   const isWhiteTurn = currentTurn === 'w';
   const isUserTurn = currentTurn === userColor;
+  const remainingSeconds = isWhiteTurn ? whiteTimeSeconds : blackTimeSeconds;
+  const suggestedSeconds = thinkingTimeEstimate ? Math.min(thinkingTimeEstimate.recommendedSeconds, remainingSeconds < 0 ? Infinity : Math.max(0, remainingSeconds / (remainingSeconds < 30 ? 15 : 30))) : 0;
 
   const formatTime = (secs: number) => {
+    if (secs < 0) return 'Sin fin';
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
@@ -78,13 +81,12 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
             <button
               type="button"
               onClick={onOpenControlTab}
-              title={`Consultado con el Subdirector: 4 motores OK en ${subDirectorReport.latencyMs} ms`}
+              title={subDirectorReport.message}
               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800/90 text-[10px] text-slate-300 hover:border-emerald-500/40 transition-colors"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
               <span className="text-slate-400 font-medium">Subdirector:</span>
-              <span className="text-emerald-400 font-semibold">4 Motores OK</span>
-              <span className="text-sky-400 font-mono text-[9px]">(&lt;1ms)</span>
+              <span className="font-semibold">{subDirectorReport.allEnginesOk ? 'Motores verificados' : 'Verificación pendiente'}</span>
             </button>
           )}
         </div>
@@ -157,8 +159,8 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
             <>
               <div className="flex items-center gap-1.5 truncate">
                 <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="font-mono text-xs font-bold text-sky-300">
-                  ~{thinkingTimeEstimate.recommendedSeconds}s
+                <span title={thinkingTimeEstimate.reasoning} className="font-mono text-xs font-bold text-sky-300">
+                  {thinkingTimeEstimate.basis || 'Estimación'} ~{Math.round(suggestedSeconds * 10) / 10}s
                 </span>
                 <span
                   className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border truncate ${

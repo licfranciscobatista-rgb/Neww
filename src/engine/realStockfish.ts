@@ -56,7 +56,8 @@ const DEPTH_SEARCH_TIMEOUT_MS = 2500;
 // Tiempo de espera tras stop
 const STOP_GRACE_MS = 400;
 
-class RealStockfishManager {
+export class RealStockfishManager {
+  constructor(private readonly hashMb?: number) {}
   private worker: Worker | null = null;
   private isInitialized = false;
   private initPromise: Promise<boolean> | null = null;
@@ -135,7 +136,7 @@ class RealStockfishManager {
         const line = typeof e.data === 'string' ? e.data.trim() : '';
         if (line === 'uciok') {
           const profile = getDevicePerformanceProfile();
-          worker.postMessage(`setoption name Hash value ${profile.stockfishHashMb}`);
+          worker.postMessage(`setoption name Hash value ${this.hashMb ?? profile.stockfishHashMb}`);
           worker.postMessage('setoption name Threads value 1');
           worker.postMessage('isready');
         } else if (line === 'readyok') {

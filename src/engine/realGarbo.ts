@@ -61,7 +61,7 @@ const MAX_EVAL = 2000000;
 const MATE_THRESHOLD = MAX_EVAL - 2000;
 const CP_DIVISOR = 10;
 
-class RealGarboManager {
+export class RealGarboManager {
   private worker: Worker | null = null;
   private isInitialized = false;
   private initPromise: Promise<boolean> | null = null;

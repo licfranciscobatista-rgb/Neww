@@ -9,8 +9,9 @@ import { Chess } from 'chess.js';
  */
 export function cloneChessWithHistory(source: Chess): Chess {
   try {
-    const copy = new Chess();
-    for (const m of source.history({ verbose: true })) {
+    const history = source.history({ verbose: true });
+    const copy = new Chess(history[0]?.before || source.fen());
+    for (const m of history) {
       copy.move({ from: m.from, to: m.to, promotion: m.promotion });
     }
     // Solo se acepta si la copia quedó idéntica (p. ej. la partida no arrancó desde otro FEN).
