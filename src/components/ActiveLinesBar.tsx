@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { EngineRecommendation, EngineType } from '../types/chess';
 
 interface ActiveLinesBarProps {
+  systemsMode?: boolean;
   mateAlert?: string | null;
   recommendations: Record<EngineType, EngineRecommendation | null>;
   activeArrowFilter: Record<EngineType, boolean>;
@@ -55,6 +56,7 @@ const ENGINE_CONFIG: Record<
 };
 
 export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
+  systemsMode = false,
   mateAlert,
   recommendations,
   activeArrowFilter,
@@ -108,7 +110,7 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {(['stockfish', 'maia', 'personal'] as EngineType[]).map((eng) => {
+          {(!systemsMode ? ['stockfish', 'maia', 'personal'] as EngineType[] : []).map((eng) => {
             const conf = ENGINE_CONFIG[eng];
             const isActive = activeArrowFilter[eng];
             const hasMove = !!recommendations[eng]?.move;
@@ -147,7 +149,7 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
           })}
 
           {/* Recomendación de mala jugada calculada por Chess.js */}
-          {recommendations.chessjs?.san && (
+          {!systemsMode && recommendations.chessjs?.san && (
             <button
               type="button"
               onClick={() => onToggleEngineFilter('chessjs')}
@@ -173,7 +175,7 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
             </button>
           )}
 
-          {recommendations.garbo?.san && (() => {
+          {systemsMode && recommendations.garbo?.san && (() => {
             const conf = ENGINE_CONFIG.garbo;
             const isActive = activeArrowFilter.garbo;
             return (

@@ -457,6 +457,7 @@ export function App() {
       void verifyEnginesBeforePlay();
     }
     setSystemsMode(options.systemsMode === true);
+    setActiveTab('board');
     if (rodentSystem) setArrowFilter(previous => ({ ...previous, garbo: true }));
     setRodentSystem(null);
     const newId = `game_${Date.now()}`;
@@ -755,6 +756,7 @@ export function App() {
                         timeControlSeconds: whiteTime || 600,
                         showLinesMode,
                         stockfishMode: supervisorState.stockfishMode,
+                        systemsMode,
                       })
                     }
                     className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] transition-colors shadow-md"
@@ -814,15 +816,15 @@ export function App() {
               <div className="lg:col-span-6 xl:col-span-7 flex flex-col items-center space-y-3">
                 <ChessBoard
                   systemThreat={systemsMode && systemThreat.fen === chess.fen() ? systemThreat.arrow : null}
-                  rodentArrow={rodentArrow.fen === chess.fen() && !isRivalTurn ? rodentArrow.arrow : null}
-                  endgameArrows={endgameState.fen === chess.fen() ? endgameState.arrows : []}
+                  rodentArrow={systemsMode && rodentArrow.fen === chess.fen() && !isRivalTurn ? rodentArrow.arrow : null}
+                  endgameArrows={!systemsMode && endgameState.fen === chess.fen() ? endgameState.arrows : []}
                   chess={chess}
                   boardOrientation={boardOrientation}
                   onMove={handleBoardMove}
                   recommendations={supervisorState.recommendations}
                   candidateArrows={supervisorState.candidateArrows}
                   agreements={supervisorState.agreements}
-                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, maia: false, personal: false, chessjs: false } : arrowFilter}
+                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, maia: false, personal: false, chessjs: false } : { ...arrowFilter, garbo: false }}
                   onToggleEngineFilter={handleToggleArrow}
                   lastMove={lastMove}
                   interactive={!chess.isGameOver()}
@@ -831,6 +833,7 @@ export function App() {
                 />
 
                 <ActiveLinesBar
+                  systemsMode={systemsMode}
                   recommendations={supervisorState.recommendations}
                   activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, maia: false, personal: false, chessjs: false } : arrowFilter}
                   onToggleEngineFilter={handleToggleArrow}
@@ -858,7 +861,7 @@ export function App() {
                   lastMoveSan={lastMove?.san}
                   onShowVerdictModal={(san, verdict) => setVerdictModalData({ san, verdict })}
                 />
-                <AssistanceBar chess={chess} profile={profile} userColor={userColor}
+                {!systemsMode && <AssistanceBar chess={chess} profile={profile} userColor={userColor}
                   maia={supervisorState.recommendations.maia}
                   maiaVisible={arrowFilter.maia} onToggleMaia={() => handleToggleArrow('maia')}
                   onChangeElo={newElo => {
@@ -866,14 +869,14 @@ export function App() {
                     setProfile(updated); savePlayerProfile(updated); triggerSupervisor(chess);
                   }}
                   onVerdict={(san, verdict) => setVerdictModalData({ san, verdict })}
-                  onArrows={handleEndgameArrows} />
+                  onArrows={handleEndgameArrows} />}
               </div>
 
               {/* Right Column: Engine Cards */}
               <div className="lg:col-span-6 xl:col-span-5 space-y-3">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>Recomendaciones Multi-Motor</span>
+                    <span>{systemsMode ? 'Sistemas: Garbo y Rodent' : 'Recomendaciones Multi-Motor'}</span>
                     {isRivalTurn && (
                       <span className="text-[10px] text-emerald-400 font-normal normal-case px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -889,7 +892,8 @@ export function App() {
                 </div>
 
                 <EngineCards
-                  rodentPanel={<RodentPanel chess={chess} gameId={gameId} userColor={userColor}
+                  systemsMode={systemsMode}
+                  rodentPanel={systemsMode ? <RodentPanel chess={chess} gameId={gameId} userColor={userColor}
                     systemsMode={systemsMode}
                     onThreat={handleSystemThreat}
                     selected={supervisorState.garboOpening || 'free'}
@@ -909,7 +913,7 @@ export function App() {
                       setRodentSystem(null);
                       setArrowFilter(previous => ({ ...previous, garbo: true }));
                       supervisorRef.current?.setGarboOpening(previousGarboSystem, chess);
-                    }} />}
+                    }} /> : null}
                   chess={chess}
                   recommendations={supervisorState.recommendations}
                   loadingStates={supervisorState.loadingStates}
@@ -984,7 +988,7 @@ export function App() {
 
       {/* Modals */}
       {isPositionEditorOpen && <PositionSetupModal initialFen={chess.fen()} userColor={userColor} onClose={() => setIsPositionEditorOpen(false)} onConfirm={async (fen, color) => {
-        await handleStartNewGame({ startingFen: fen, userColor: color, gameMode: 'manual_board', timeControlSeconds: 0, showLinesMode, stockfishMode: supervisorState.stockfishMode });
+        await handleStartNewGame({ startingFen: fen, userColor: color, gameMode: 'manual_board', timeControlSeconds: 0, showLinesMode, stockfishMode: supervisorState.stockfishMode, systemsMode });
         setIsPositionEditorOpen(false);
         setActiveTab('board');
       }}/ >}

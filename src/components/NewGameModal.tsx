@@ -37,7 +37,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({ isOpen, onClose, onS
     <section role="dialog" aria-modal="true" aria-label="Nueva partida" className="bg-slate-900 border border-slate-600 rounded-lg max-w-md w-full max-h-[90dvh] overflow-y-auto p-5 space-y-5 text-slate-200">
       <div className="flex justify-between items-center"><h2 className="text-base font-bold">Nueva partida</h2><button disabled={checking} aria-label="Cerrar nueva partida" title="Cerrar" onClick={onClose} className="p-2 disabled:opacity-40"><X size={18}/></button></div>
       {choices('Mi bando', side, [['w', 'Blancas'], ['b', 'Negras'], ['random', 'Aleatorio']], setSide)}
-      {choices('Asistencia', systemsMode ? 'systems' : 'normal', [['normal', 'Normal'], ['systems', 'Sistemas']], value => setSystemsMode(value === 'systems'))}
+      {choices('Asistencia', systemsMode ? 'systems' : 'normal', [['normal', 'Juego'], ['systems', 'Sistemas']], value => setSystemsMode(value === 'systems'))}
       {choices('Oponente', mode, [['vs_ai', 'IA Offline'], ['manual_board', 'Tablero manual']], setMode)}
       {choices('Tiempo', time, [[180, '3 min'], [300, '5 min'], [600, '10 min'], [900, '15 min'], [0, 'Sin fin']], setTime)}
       {choices('Líneas y flechas', lines, [['my_turn_only', 'Mi turno'], ['both_turns', 'Ambos turnos'], ['none', 'Sin líneas']], setLines)}

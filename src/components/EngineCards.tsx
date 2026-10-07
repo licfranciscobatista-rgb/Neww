@@ -19,6 +19,7 @@ import { OPENING_PRESETS, type OpeningChoice } from '../engine/openingIndex';
 import { getOpeningName } from '../engine/openingService';
 
 interface EngineCardsProps {
+  systemsMode?: boolean;
   rodentPanel?: React.ReactNode;
   chess: Chess;
   recommendations: Record<EngineType, EngineRecommendation | null>;
@@ -44,6 +45,7 @@ interface EngineCardsProps {
 }
 
 export const EngineCards: React.FC<EngineCardsProps> = ({
+  systemsMode = false,
   rodentPanel,
   chess,
   recommendations,
@@ -228,9 +230,9 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
 
   return (
     <div className="w-full space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className={`grid grid-cols-1 ${systemsMode ? '' : 'sm:grid-cols-2'} gap-3`}>
         {/* Stockfish 19 */}
-        <div className="bg-slate-900/90 border border-blue-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-blue-500/60">
+        <div className={`${systemsMode ? 'hidden' : ''} bg-slate-900/90 border border-blue-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-blue-500/60`}>
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
@@ -373,7 +375,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-900/90 border border-emerald-500/30 rounded-lg p-3.5 flex flex-col gap-3">
+        <div className={`${systemsMode ? '' : 'hidden'} bg-slate-900/90 border border-emerald-500/30 rounded-lg p-3.5 flex flex-col gap-3`}>
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-xs font-bold text-emerald-300">GarboChess</h4>
             <div className="flex items-center gap-1">
@@ -418,7 +420,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         {rodentPanel}
 
         {/* Motor Personal (Identidad Propia del Jugador) */}
-        {(() => {
+        {!systemsMode && (() => {
           const cleanProgress = personalProgress.replace(/\s*partidas\s*$/i, '').trim();
           return (
             <div
