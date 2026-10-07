@@ -151,6 +151,7 @@ export function App() {
     setGameReadiness(previous => previous?.verificationComplete ? previous : report);
     return report;
   }, [profile.gamesPlayed, games.length]);
+  const verificationRef = useRef<Promise<GameReadinessReport> | null>(null);
   const hasVerifiedOnceRef = useRef(false);
   const verifyEnginesBeforePlay = useCallback((force = false) => {
     if (hasVerifiedOnceRef.current && !force) {
