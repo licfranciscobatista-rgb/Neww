@@ -25,10 +25,19 @@ jobs:
           java-version: 21
 
       - name: Instalar dependencias
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
 
       - name: Compilar la web (solo Vite, sin el servidor Express)
-        run: npm run build:web
+        env:
+          VITE_BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          npm run build:web
+          node scripts/verify-web-package.cjs
+
+      - name: Verificar tipos y regresiones
+        run: |
+          npm run lint
+          npm run test:regression
 
       - name: Crear proyecto Android
         run: |
@@ -41,7 +50,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Verificar contenido del APK
+        run: python3 scripts/verify-apk-package.py android/app/build/outputs/apk/debug/app-debug.apk
+
       - name: Subir APK
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: jugada-offline-apk

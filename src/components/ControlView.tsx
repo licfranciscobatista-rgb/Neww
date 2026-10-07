@@ -4,6 +4,7 @@ import { controlDirector } from '../engine/controlDirector';
 import { subDirectorAuditor, type SubDirectorPreflightResult } from '../engine/director/subDirectorEngineAuditor';
 import { loadGameRecords } from '../storage/chessStorage';
 import { ControlJsonInspector } from './control/ControlJsonInspector';
+import { verifyStartup } from '../engine/startupVerification';
 
 export const ControlView: React.FC = () => {
   const [telemetry, setTelemetry] = useState(() => controlDirector.getTelemetry(loadGameRecords().length));
@@ -18,9 +19,9 @@ export const ControlView: React.FC = () => {
   const verify = async () => {
     setBusy(true); setMessage('');
     try {
-      const checks = await controlDirector.verifyAllEnginesDeep(loadGameRecords().length);
-      const missing = Object.values(checks).filter(check => !check.isOperational).map(check => check.name);
-      setMessage(missing.length ? `Sin verificar: ${missing.join(', ')}` : 'Pruebas operativas completadas.');
+      const report = await verifyStartup(controlDirector.consultGameReadiness(loadGameRecords().length));
+      controlDirector.recordStartupVerification(report);
+      setMessage(report.message);
       setTelemetry(controlDirector.getTelemetry(loadGameRecords().length));
     } catch { setMessage('No se pudo completar la auditoría.'); }
     finally { setBusy(false); }

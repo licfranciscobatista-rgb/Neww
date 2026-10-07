@@ -112,6 +112,8 @@ export interface IndependentEnginesTelemetry {
 }
 
 export interface GameReadinessReport {
+  verificationComplete?: boolean;
+  startupIssues?: string[];
   ready: boolean;
   latencyMs: number;
   timestamp: string;
@@ -689,6 +691,7 @@ export class ControlDirectorManager {
    * estén correctamente instalados, operativos y sin bloqueos de 60 FPS.
    */
   public consultGameReadiness(gamesPlayedByUser = 0): GameReadinessReport {
+    if (this.lastGameReadinessReport?.verificationComplete) return this.lastGameReadinessReport;
     const t0 = performance.now();
     const nowStr = new Date().toLocaleTimeString('es-ES');
 
@@ -746,6 +749,21 @@ export class ControlDirectorManager {
     return this.lastGameReadinessReport;
   }
 
+  public recordStartupVerification(report: GameReadinessReport): void {
+    this.lastGameReadinessReport = report;
+    this.lastEnginesVerificationTime = report.timestamp;
+    this.lastInterventionNote = report.message;
+    for (const name of ['stockfish', 'garbo', 'maia', 'personal'] as const) {
+      const result = report.engines[name];
+      Object.assign(this.engineHealthChecks[name], {
+        isInstalled: result.isInstalled, isOperational: result.isOperational,
+        statusText: result.status, verifiedAt: report.timestamp,
+        checksPassed: [result.status],
+      });
+    }
+    this.notifyTelemetry();
+  }
+
   public getTelemetry(gamesPlayedByUser = 0): DirectorTelemetry {
     const personalUnlocked = gamesPlayedByUser >= 10;
     this.memoryAllocations.personal.status = personalUnlocked ? 'ACTIVE' : 'LOCKED_NEED_10_GAMES';
@@ -793,7 +811,7 @@ export class ControlDirectorManager {
       fpsStabilityStatus: this.getFpsStabilityStatus(),
       frameBudgetMs: 16.6,
       droppedFramesPrevented: this.droppedFramesPrevented,
-      enginesHealthSummary: 'ALL_OPERATIONAL',
+      enginesHealthSummary: this.lastGameReadinessReport?.verificationComplete && this.lastGameReadinessReport.allEnginesOk ? 'ALL_OPERATIONAL' : 'VERIFYING',
       directorHelpRequestsCount: this.directorHelpRequestsCount,
       subdirectorInterventions: this.subdirectorInterventions,
       interventionsBreakdown: { ...this.interventionsBreakdown },

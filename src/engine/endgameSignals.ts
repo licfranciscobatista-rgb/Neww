@@ -17,6 +17,12 @@ export function mateSignal(result: RealStockfishAnalysis | null): boolean {
   return result?.mate !== undefined && result.mate !== 0 && Math.abs(result.mate) <= 5;
 }
 
+export function ownMateSignal(result: RealStockfishAnalysis | null, turn: 'w' | 'b', userColor: 'w' | 'b'): boolean {
+  if (!mateSignal(result)) return false;
+  const winner = result!.mate! > 0 ? turn : turn === 'w' ? 'b' : 'w';
+  return winner === userColor;
+}
+
 export function drawReason(board: Chess): string | undefined {
   if (board.isStalemate()) return 'Ahogado';
   if (board.isInsufficientMaterial()) return 'Material insuficiente';

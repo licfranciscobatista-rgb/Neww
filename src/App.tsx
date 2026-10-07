@@ -37,11 +37,15 @@ import { realStockfish } from './engine/realStockfish';
 import { getReliableTheoryMoves, lookupTheory } from './engine/theoryBook';
 import { cloneChessWithHistory } from './utils/chessClone';
 import { controlDirector, subDirector, GameReadinessReport } from './engine/controlDirector';
+import { verifyStartup } from './engine/startupVerification';
 import { playChessSound } from './utils/chessAudio';
 import { ChessBoard } from './components/ChessBoard';
 import { ActiveLinesBar } from './components/ActiveLinesBar';
 import { EngineCards } from './components/EngineCards';
 import { GameControls } from './components/GameControls';
+import { AssistanceBar } from './components/AssistanceBar';
+import { RodentPanel, type RodentArrow } from './components/RodentPanel';
+import type { EndgameArrow } from './components/EndgamePanels';
 import { GameTurnClockBar } from './components/GameTurnClockBar';
 import { HumanityVerdictModal } from './components/HumanityVerdictModal';
 import { NewGameModal, NewGameOptions, ShowLinesMode } from './components/NewGameModal';
@@ -84,6 +88,14 @@ export function App() {
   // Modals
   const [isNewGameModalOpen, setIsNewGameModalOpen] = useState(false);
   const [isPositionEditorOpen, setIsPositionEditorOpen] = useState(false);
+  const [endgameState, setEndgameState] = useState<{ fen: string; arrows: EndgameArrow[] }>({ fen: '', arrows: [] });
+  const handleEndgameArrows = useCallback((fen: string, arrows: EndgameArrow[]) => setEndgameState({ fen, arrows }), []);
+  const [rodentSystem, setRodentSystem] = useState<string | null>(null);
+  const [previousGarboSystem, setPreviousGarboSystem] = useState('london');
+  const [rodentArrow, setRodentArrow] = useState<{ fen: string; arrow: RodentArrow | null }>({ fen: '', arrow: null });
+  const handleRodentArrow = useCallback((fen: string, arrow: RodentArrow | null) => setRodentArrow({ fen, arrow }), []);
+  const [systemThreat, setSystemThreat] = useState<{ fen: string; arrow: RodentArrow | null }>({ fen: '', arrow: null });
+  const handleSystemThreat = useCallback((fen: string, arrow: RodentArrow | null) => setSystemThreat({ fen, arrow }), []);
   const readMoveSeconds = useMoveTimer(chess.fen(), activeTab === 'board' && !isNewGameModalOpen && !isPositionEditorOpen);
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [verdictModalData, setVerdictModalData] = useState<{ san: string; verdict: HumanityVerdictResult } | null>(null);
@@ -101,6 +113,7 @@ export function App() {
 
   // Line recommendation preferences (default: only on player turn to eliminate lag)
   const [showLinesMode, setShowLinesMode] = useState<ShowLinesMode>('my_turn_only');
+  const [systemsMode, setSystemsMode] = useState(false);
 
   // Engine arrow filters (Stockfish, Maia y Personal con flechas; Garbo como recomendación teórica)
   const [arrowFilter, setArrowFilter] = useState<Record<EngineType, boolean>>({
@@ -135,8 +148,17 @@ export function App() {
 
   const handleConsultControl = useCallback(() => {
     const report = subDirector.consultReadiness(profile.gamesPlayed || games.length);
-    setGameReadiness(report);
+    setGameReadiness(previous => previous?.verificationComplete ? previous : report);
     return report;
+  }, [profile.gamesPlayed, games.length]);
+  const verificationRef = useRef<Promise<GameReadinessReport> | null>(null);
+  const verifyEnginesBeforePlay = useCallback(() => {
+    if (!verificationRef.current) {
+      const base = subDirector.consultReadiness(profile.gamesPlayed || games.length);
+      setGameReadiness({ ...base, verificationComplete: false });
+      verificationRef.current = verifyStartup(base).then(report => { controlDirector.recordStartupVerification(report); setGameReadiness(report); return report; }).finally(() => { verificationRef.current = null; });
+    }
+    return verificationRef.current;
   }, [profile.gamesPlayed, games.length]);
 
   const handleTabChange = (tab: ActiveTab) => {
@@ -180,6 +202,8 @@ export function App() {
     void realStockfish.init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
+
+  useEffect(() => { void verifyEnginesBeforePlay(); }, []);
 
   const accumulatedClockMsRef = useRef(0);
   const lastClockTickRef = useRef<number>(Date.now());
@@ -417,7 +441,11 @@ export function App() {
     supervisorRef.current?.setStockfishMode(mode, chess);
   }, [chess]);
 
-  const handleStartNewGame = (options: NewGameOptions) => {
+  const handleStartNewGame = async (options: NewGameOptions) => {
+    await verifyEnginesBeforePlay();
+    setSystemsMode(options.systemsMode === true);
+    if (rodentSystem) setArrowFilter(previous => ({ ...previous, garbo: true }));
+    setRodentSystem(null);
     const newId = `game_${Date.now()}`;
     const freshChess = new Chess(options.startingFen);
     startingFenRef.current = freshChess.fen();
@@ -440,6 +468,7 @@ export function App() {
     if (supervisorRef.current) {
       supervisorRef.current.setStockfishMode(options.stockfishMode, freshChess);
       supervisorRef.current.resetForNewGame(newId);
+      if (supervisorState.garboOpening === 'rodent-active') supervisorRef.current.setGarboOpening(previousGarboSystem, freshChess);
     }
   };
 
@@ -603,6 +632,7 @@ export function App() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
                 Jugada Offline <span className="text-sky-400 font-mono">3.2</span>
+                <span title={typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__ : 'local'} className="ml-2 text-[10px] font-mono text-slate-400">{typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__.slice(0, 8) : 'local'}</span>
               </h1>
               <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                 {isOnline ? <Wifi className="w-3 h-3 text-emerald-400" /> : <WifiOff className="w-3 h-3 text-amber-400" />}
@@ -770,13 +800,16 @@ export function App() {
               {/* Left Column: Board and Game Controls */}
               <div className="lg:col-span-6 xl:col-span-7 flex flex-col items-center space-y-3">
                 <ChessBoard
+                  systemThreat={systemsMode && systemThreat.fen === chess.fen() ? systemThreat.arrow : null}
+                  rodentArrow={rodentArrow.fen === chess.fen() && !isRivalTurn ? rodentArrow.arrow : null}
+                  endgameArrows={endgameState.fen === chess.fen() ? endgameState.arrows : []}
                   chess={chess}
                   boardOrientation={boardOrientation}
                   onMove={handleBoardMove}
                   recommendations={supervisorState.recommendations}
                   candidateArrows={supervisorState.candidateArrows}
                   agreements={supervisorState.agreements}
-                  activeArrowFilter={arrowFilter}
+                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, maia: false, personal: false, chessjs: false } : arrowFilter}
                   onToggleEngineFilter={handleToggleArrow}
                   lastMove={lastMove}
                   interactive={!chess.isGameOver()}
@@ -786,7 +819,7 @@ export function App() {
 
                 <ActiveLinesBar
                   recommendations={supervisorState.recommendations}
-                  activeArrowFilter={arrowFilter}
+                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, maia: false, personal: false, chessjs: false } : arrowFilter}
                   onToggleEngineFilter={handleToggleArrow}
                   isRivalTurn={isRivalTurn}
                   rivalColorLabel={chess.turn() === 'w' ? 'Blancas' : 'Negras'}
@@ -812,6 +845,15 @@ export function App() {
                   lastMoveSan={lastMove?.san}
                   onShowVerdictModal={(san, verdict) => setVerdictModalData({ san, verdict })}
                 />
+                <AssistanceBar chess={chess} profile={profile} userColor={userColor}
+                  maia={supervisorState.recommendations.maia}
+                  maiaVisible={arrowFilter.maia} onToggleMaia={() => handleToggleArrow('maia')}
+                  onChangeElo={newElo => {
+                    const updated = { ...profile, maiaEloCalibration: newElo };
+                    setProfile(updated); savePlayerProfile(updated); triggerSupervisor(chess);
+                  }}
+                  onVerdict={(san, verdict) => setVerdictModalData({ san, verdict })}
+                  onArrows={handleEndgameArrows} />
               </div>
 
               {/* Right Column: Engine Cards */}
@@ -834,6 +876,27 @@ export function App() {
                 </div>
 
                 <EngineCards
+                  rodentPanel={<RodentPanel chess={chess} gameId={gameId} userColor={userColor}
+                    systemsMode={systemsMode}
+                    onThreat={handleSystemThreat}
+                    selected={supervisorState.garboOpening || 'free'}
+                    currentMove={supervisorState.recommendations.garbo?.move}
+                    garboLoading={supervisorState.loadingStates.garbo}
+                    activeSystem={rodentSystem}
+                    onArrow={handleRodentArrow}
+                    onMove={uci => executeMove(uci.slice(0, 2) as Square, uci.slice(2, 4) as Square, 'RODENT_ASSISTED', uci[4])}
+                    onAccept={proposal => {
+                      if (proposal.fen !== chess.fen() || proposal.sourceSystem !== supervisorState.garboOpening || chess.turn() !== userColor) return;
+                      setPreviousGarboSystem(supervisorState.garboOpening || 'free');
+                      setRodentSystem(proposal.id);
+                      setArrowFilter(previous => ({ ...previous, garbo: false }));
+                      supervisorRef.current?.setGarboOpening('rodent-active', chess);
+                    }}
+                    onResumeGarbo={() => {
+                      setRodentSystem(null);
+                      setArrowFilter(previous => ({ ...previous, garbo: true }));
+                      supervisorRef.current?.setGarboOpening(previousGarboSystem, chess);
+                    }} />}
                   chess={chess}
                   recommendations={supervisorState.recommendations}
                   loadingStates={supervisorState.loadingStates}
@@ -842,6 +905,7 @@ export function App() {
                   garboOpening={supervisorState.garboOpening}
                   garboOpeningState={supervisorState.garboOpeningState}
                   onChangeGarboOpening={(id) => {
+                    setRodentSystem(null);
                     setArrowFilter(previous => ({ ...previous, garbo: true }));
                     supervisorRef.current?.setGarboOpening(id, chess);
                   }}
@@ -906,12 +970,13 @@ export function App() {
       <OfflineIndicator />
 
       {/* Modals */}
-      {isPositionEditorOpen && <PositionSetupModal initialFen={chess.fen()} userColor={userColor} onClose={() => setIsPositionEditorOpen(false)} onConfirm={(fen, color) => {
-        handleStartNewGame({ startingFen: fen, userColor: color, gameMode: 'manual_board', timeControlSeconds: 0, showLinesMode, stockfishMode: supervisorState.stockfishMode });
+      {isPositionEditorOpen && <PositionSetupModal initialFen={chess.fen()} userColor={userColor} onClose={() => setIsPositionEditorOpen(false)} onConfirm={async (fen, color) => {
+        await handleStartNewGame({ startingFen: fen, userColor: color, gameMode: 'manual_board', timeControlSeconds: 0, showLinesMode, stockfishMode: supervisorState.stockfishMode });
         setIsPositionEditorOpen(false);
         setActiveTab('board');
       }}/ >}
       <NewGameModal
+        stockfishMode={supervisorState.stockfishMode}
         isOpen={isNewGameModalOpen}
         onClose={() => setIsNewGameModalOpen(false)}
         onStartGame={handleStartNewGame}

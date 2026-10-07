@@ -108,9 +108,11 @@ export class ChessSupervisor {
   private lastPositionKey = '';
   private lastUserColor: 'w' | 'b' = 'w';
   private lastShowLinesMode: 'my_turn_only' | 'both_turns' | 'none' = 'my_turn_only';
+  private stockfishRequestSerial = 0;
 
   constructor(onStateChange: (state: SupervisorState) => void) {
     this.onStateChange = onStateChange;
+    const savedOpening = typeof localStorage !== 'undefined' ? localStorage.getItem('jugada_garbo_opening') || 'free' : 'free';
     const initialMode: StockfishOperatingMode =
       typeof localStorage !== 'undefined'
         ? (localStorage.getItem('jugada_sf_mode') as StockfishOperatingMode) || 'per_request'
@@ -125,7 +127,7 @@ export class ChessSupervisor {
       stockfishMode: initialMode,
       stockfishRemainingUses: 3,
       garboRemainingUses: 5,
-      garboOpening: typeof localStorage !== 'undefined' ? localStorage.getItem('jugada_garbo_opening') || 'free' : 'free',
+      garboOpening: savedOpening === 'rodent-active' ? 'london' : savedOpening,
       stockfishRequestedThisTurn: false,
       garboRequestedThisTurn: false,
       recommendations: {
@@ -155,7 +157,7 @@ export class ChessSupervisor {
   }
 
   public setGarboOpening(selected: string, chess: Chess): void {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('jugada_garbo_opening', selected);
+    if (selected !== 'rodent-active' && typeof localStorage !== 'undefined') localStorage.setItem('jugada_garbo_opening', selected);
     this.state.garboOpening = selected;
     this.state.recommendations.garbo = null;
     this.state.garboOpeningState = undefined;
@@ -192,6 +194,8 @@ export class ChessSupervisor {
   }
 
   public setStockfishMode(mode: StockfishOperatingMode, chess?: Chess): void {
+    this.stockfishRequestSerial++;
+    this.state.loadingStates = { ...this.state.loadingStates, stockfish: false };
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('jugada_sf_mode', mode);
     }
@@ -279,6 +283,7 @@ export class ChessSupervisor {
   }
 
   public resetForNewGame(gameId: string): void {
+    this.stockfishRequestSerial++;
     this.lastPositionKey = '';
     // Consulta ultra-rápida de preparación al Subdirector (<0.1ms)
     subDirector.consultReadiness();
@@ -287,7 +292,7 @@ export class ChessSupervisor {
       ...this.state,
       gameId,
       positionId: `${gameId}_0`,
-      generation: 0,
+      generation: this.state.generation + 1,
       isGameOver: false,
       stockfishRemainingUses: 3, // REINICIADO A 3 USOS PARA LA NUEVA PARTIDA
       garboRemainingUses: 5,
@@ -303,6 +308,7 @@ export class ChessSupervisor {
       candidateArrows: [],
       agreements: [],
       thinkingTime: null,
+      loadingStates: { stockfish: false, garbo: false, maia: false, personal: false, chessjs: false },
     };
     this.onStateChange(this.state);
   }
@@ -352,11 +358,14 @@ export class ChessSupervisor {
     const storedGames = params.games || loadGameRecords();
 
     if (chess.isGameOver()) {
+      const finalPersonalStatus = getPersonalEngineStatus(profile, storedGames);
       this.state = {
         ...this.state,
         generation: this.state.generation + 1,
         fen,
         isGameOver: true,
+        personalEngineUnlocked: finalPersonalStatus.isUnlocked,
+        personalProgress: `${finalPersonalStatus.gamesPlayed} / 10 partidas`,
         candidateArrows: [],
         agreements: [],
         loadingStates: { stockfish: false, garbo: false, maia: false, personal: false, chessjs: false },
@@ -399,6 +408,8 @@ export class ChessSupervisor {
         fen,
         isGameOver: false,
         candidateArrows: [],
+        recommendations: { stockfish: null, garbo: null, maia: null, personal: null, chessjs: null },
+        loadingStates: { stockfish: false, garbo: false, maia: false, personal: false, chessjs: false },
         thinkingTime: null,
       };
       this.onStateChange(this.state);
@@ -595,6 +606,7 @@ export class ChessSupervisor {
 
       this.onStateChange(this.state);
       void this.updateGarbo(chess, generation, this.state.garboOpening || 'auto');
+      void this.refineMaiaWithRealEngine(fen, generation, profile.maiaEloCalibration || 1100);
     });
 
     // Refinar de forma asíncrona con Stockfish 19 WASM real solo en el turno del jugador (180ms)
@@ -674,8 +686,6 @@ export class ChessSupervisor {
       .catch(() => {});
     }
 
-    // Garbo y Maia actúan como recomendaciones teóricas directas (evaluación heurística inmediata sin workers en segundo plano)
-    // para preservar al 100% la memoria RAM (3GB) y CPU en tablets.
   }
 
   private computeAgreements(
@@ -781,6 +791,7 @@ export class ChessSupervisor {
     if (this.state.stockfishMode === 'per_request' && this.state.stockfishRemainingUses <= 0) return;
 
     const requestGeneration = this.state.generation;
+    const requestSerial = ++this.stockfishRequestSerial;
     const requestFen = chess.fen();
     const requestMode = this.state.stockfishMode;
     this.state.loadingStates.stockfish = true;
@@ -817,9 +828,7 @@ export class ChessSupervisor {
       // fallback
     }
 
-    if (this.state.generation !== requestGeneration || this.state.stockfishMode !== requestMode || chess.fen() !== requestFen) {
-      this.state.loadingStates.stockfish = false;
-      this.onStateChange({ ...this.state });
+    if (this.stockfishRequestSerial !== requestSerial || this.state.generation !== requestGeneration || this.state.stockfishMode !== requestMode || chess.fen() !== requestFen) {
       return;
     }
 

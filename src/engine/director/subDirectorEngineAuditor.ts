@@ -277,8 +277,8 @@ class SubDirectorEngineAuditorManager {
       personalFiles.push(res);
     }
     const personalT0 = performance.now();
-    const isUnlocked = effectiveGames >= 10;
     const personalStatus = getPersonalEngineStatus(profile, games);
+    const isUnlocked = personalStatus.isUnlocked;
     const testMoveSan = isUnlocked
       ? (personalStatus.distilledData.topOpenings[0]?.name || 'Línea de Estilo')
       : 'En Calibración';
@@ -299,8 +299,8 @@ class SubDirectorEngineAuditorManager {
       activeMode: 'PERSONAL_8_ASSISTANTS',
       statusBadge: isUnlocked ? 'CERTIFICADO' : 'EN_CALIBRACION',
       diagnosticNote: isUnlocked
-        ? `8 Ayudantes verificados individualmente y calibrados con ${effectiveGames} partidas del usuario.`
-        : `8 Ayudantes operativos y en aprendizaje continuo (${effectiveGames}/10 partidas requeridas).`,
+        ? `8 Ayudantes verificados individualmente con ${personalStatus.gamesPlayed} partidas manuales finalizadas.`
+        : `8 Ayudantes operativos y en aprendizaje continuo (${personalStatus.gamesPlayed}/10 partidas requeridas).`,
       assistantsAudit,
     };
 

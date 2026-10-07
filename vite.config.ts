@@ -7,6 +7,14 @@ import {VitePWA} from 'vite-plugin-pwa';
 export default defineConfig(({mode}) => {
   return {
     plugins: [
+      {
+        name: 'build-identity',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'build-info.json', source: JSON.stringify({
+            commit: process.env.VITE_BUILD_COMMIT || 'local', mode,
+          }) });
+        },
+      },
       react(),
       tailwindcss(),
       VitePWA({
@@ -62,9 +70,9 @@ export default defineConfig(({mode}) => {
           // Los pesos de Maia 3 (.bin, decenas de MB) no entran en el precache: se guardan en la primera carga
           runtimeCaching: [
             {
-              urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/maia/') && url.pathname.endsWith('.bin'),
+              urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/maia/') && /\.bin(?:\.\d+)?$/.test(url.pathname),
               handler: 'CacheFirst',
-              options: { cacheName: 'maia-model', expiration: { maxEntries: 2 }, cacheableResponse: { statuses: [0, 200] } },
+              options: { cacheName: 'maia-model', expiration: { maxEntries: 6 }, cacheableResponse: { statuses: [0, 200] } },
             },
           ],
         },
@@ -74,6 +82,7 @@ export default defineConfig(({mode}) => {
         },
       }),
     ],
+    define: { __BUILD_COMMIT__: JSON.stringify(process.env.VITE_BUILD_COMMIT || 'local') },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

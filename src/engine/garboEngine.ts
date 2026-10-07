@@ -4,6 +4,7 @@ import { getReliableTheoryMoves } from './theoryBook';
 import { realGarbo } from './realGarbo';
 import { queryOpening } from './openingService';
 import { OPENING_PRESETS, shouldPauseGarbo, type OpeningChoice } from './openingIndex';
+import { continueLondon } from './londonPlanner';
 
 // Independent fallback for synchronous engine health checks, not live recommendations.
 export function runGarboRecommendation(chess: Chess): EngineRecommendation | null {
@@ -23,9 +24,21 @@ export async function analyzeGarbo(chess: Chess, selected: string): Promise<{
   rec: EngineRecommendation | null; opening: OpeningChoice;
 }> {
   const fen = chess.fen();
+  if (selected === 'rodent-active') {
+    realGarbo.terminate();
+    return { rec: null, opening: { status: 'free', notice: 'Garbo apagado por cambio aceptado a Rodent.' } };
+  }
   const history = chess.history({ verbose: true }).map(move => move.after);
   const opening = await queryOpening(fen, selected, history);
   const system = OPENING_PRESETS.find(item => item.id === selected)?.name || opening.name || 'el sistema elegido';
+  if (selected === 'london' && (!opening.uci || chess.inCheck())) {
+    const plan = await continueLondon(chess, position => realGarbo.analyze(position, { movetime: 100 }));
+    opening.notice = plan?.notice || 'Londres sigue seleccionado; motor no disponible para calcular una continuación.';
+    opening.suggestedSystem = undefined;
+    if (!plan) return { opening, rec: null };
+    const move = new Chess(fen).move({ from: plan.move.slice(0, 2), to: plan.move.slice(2, 4), promotion: plan.move[4] });
+    return { opening, rec: { engine: 'garbo', engineName: 'GarboChess / Londres', move: plan.move, from: move.from, to: move.to, san: move.san, evaluation: plan.score / 100, evalDisplay: 'Plan Londres', isBookMove: false, explanation: plan.notice, color: '#059669' } };
+  }
   if (shouldPauseGarbo(selected, opening)) {
     opening.notice = opening.status === 'unavailable'
       ? `${system} en pausa: repertorio no disponible.`

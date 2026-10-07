@@ -191,8 +191,11 @@ export function runMaiaRecommendation(
 
     // 4. Desarrollo de piezas menores (Caballos y Alfiles)
     if ((pieceType === 'n' || pieceType === 'b') && !isCapture) {
-      logit += 25;
-      rationale = rationale || `Desarrollo armonioso de pieza menor (${m.san})`;
+      const homeRank = turn === 'w' ? '1' : '8';
+      const developing = m.from[1] === homeRank && m.to[1] !== homeRank;
+      logit += developing ? 25 : 5;
+      rationale = rationale || (developing ? `Desarrollo de pieza menor (${m.san})` : `Maniobra de pieza menor (${m.san})`);
+      if (historyPlies < 16 && !developing) logit -= 10;
     }
 
     // 5. Peones centrales (e4, d4, e5, d5) vs Peones de ala (a4, h4, a3, h3)
@@ -239,6 +242,8 @@ export function runMaiaRecommendation(
       }
     }
 
+    if (m.san.includes('#')) logit += 1000;
+
     // 8. Posición y casillas activas
     const posVal = getSquarePositionalValue(pieceType, m.to, turn);
     logit += (posVal / 10) * (0.4 + 0.6 * eloRatio);
@@ -260,7 +265,7 @@ export function runMaiaRecommendation(
   // Elo 500: Temperature = 1.8 (higher variance/randomness, captures and mistakes common)
   // Elo 1500: Temperature = 1.0 (moderate human focus)
   // Elo 2400: Temperature = 0.5 (sharp master consensus)
-  const temperature = 1.8 - 1.3 * eloRatio;
+  const temperature = 12 * (1.8 - 1.3 * eloRatio);
 
   const maxLogit = Math.max(...moveScores.map((s) => s.logit));
   const expScores = moveScores.map((s) => ({
@@ -280,7 +285,7 @@ export function runMaiaRecommendation(
   normalizedMoves.sort((a, b) => b.prob - a.prob);
 
   const topPick = normalizedMoves[0];
-  const humanProbability = Math.min(0.95, Math.max(0.35, topPick.prob * 1.8));
+  const humanProbability = topPick.prob;
 
   // Compute representative evaluation in centipawns for display
   const evalCentipawns = Math.round(
@@ -292,7 +297,7 @@ export function runMaiaRecommendation(
   return {
     engine: 'maia',
     engineName: `Maia 3 (${tier.label})`,
-    move: `${topPick.move.from}${topPick.move.to}`,
+    move: `${topPick.move.from}${topPick.move.to}${topPick.move.promotion || ''}`,
     from: topPick.move.from,
     to: topPick.move.to,
     san: topPick.move.san,

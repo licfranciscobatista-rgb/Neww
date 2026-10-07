@@ -8,6 +8,9 @@ const base = { id: 'regression', date: 'test', title: 'test', playerColor: 'w', 
 assert.equal(aggregatePositionUsage([base])[0].winRate, 0);
 assert.equal(aggregatePositionUsage([{ ...base, result: '1-0' }, { ...base, result: '*' }])[0].winRate, 100);
 assert.equal(aggregateEngineUsageAndEffectiveness([], []).engineStats.MANUAL.percentageOfMoves, 0);
+const rodentUsage = aggregateEngineUsageAndEffectiveness([{ ...base, moves: [{ source: 'RODENT_ASSISTED', ply: 1, fenBefore: '8/8/8/8/8/8/8/8 w - - 0 1' }] }], []);
+assert.equal(rodentUsage.engineStats.RODENT_ASSISTED.count, 1);
+assert.equal(rodentUsage.engineStats.MANUAL.count, 0);
 saveGameRecord({ ...base, moves: [{ ply: 1, from: 'a7', to: 'a8', san: 'a8=Q', uci: 'a7a8q', source: 'MANUAL', thinkTime: 0, fenBefore: 'before', fenAfter: 'after' }] });
 const saved = loadGameRecords().find(game => game.id === base.id);
 assert.equal(saved.moves[0].thinkTime, 0);

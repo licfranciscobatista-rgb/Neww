@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { EngineRecommendation, EngineType } from '../types/chess';
 
 interface ActiveLinesBarProps {
+  mateAlert?: string | null;
   recommendations: Record<EngineType, EngineRecommendation | null>;
   activeArrowFilter: Record<EngineType, boolean>;
   onToggleEngineFilter: (engine: EngineType) => void;
@@ -54,6 +55,7 @@ const ENGINE_CONFIG: Record<
 };
 
 export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
+  mateAlert,
   recommendations,
   activeArrowFilter,
   onToggleEngineFilter,
@@ -94,15 +96,14 @@ export const ActiveLinesBar: React.FC<ActiveLinesBarProps> = ({
             </button>
           )}
 
+          {mateAlert && <span role="status" className="text-xs text-rose-300 break-words flex items-center gap-1 min-w-0"><AlertTriangle size={15} className="shrink-0"/>{mateAlert}</span>}
           {isRivalTurn ? (
             <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Tu turno ({rivalColorLabel})
             </span>
           ) : (
-            <span className="text-[10px] text-slate-500 hidden sm:inline">
-              (toca para encender/apagar motores)
-            </span>
+            null
           )}
         </div>
 

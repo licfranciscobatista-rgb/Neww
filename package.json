@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:regression": "node scripts/run-regression.cjs",
     "build:web": "vite build --mode apk"
   },
   "dependencies": {

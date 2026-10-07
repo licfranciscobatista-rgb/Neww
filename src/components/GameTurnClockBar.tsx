@@ -84,9 +84,9 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
               title={subDirectorReport.message}
               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800/90 text-[10px] text-slate-300 hover:border-emerald-500/40 transition-colors"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
+              <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${!subDirectorReport.verificationComplete ? 'bg-sky-400 animate-pulse' : subDirectorReport.allEnginesOk ? 'bg-emerald-400' : 'bg-amber-400'}`} />
               <span className="text-slate-400 font-medium">Subdirector:</span>
-              <span className="font-semibold">{subDirectorReport.allEnginesOk ? 'Motores verificados' : 'Verificación pendiente'}</span>
+              <span className="font-semibold">{subDirectorReport.verificationComplete ? subDirectorReport.allEnginesOk ? 'Motores verificados' : 'Verificado con avisos' : 'Verificando motores'}</span>
             </button>
           )}
         </div>
@@ -111,6 +111,9 @@ export const GameTurnClockBar: React.FC<GameTurnClockBarProps> = ({
         </div>
       </div>
 
+      {subDirectorReport?.verificationComplete && !!subDirectorReport.startupIssues?.length && (
+        <p role="status" className="text-[11px] text-amber-300 break-words">{subDirectorReport.startupIssues.join(' ')}</p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
         <div
           className={`sm:col-span-4 px-2.5 py-1.5 rounded-lg border flex items-center justify-between transition-all ${

@@ -15,11 +15,11 @@ import {
 import { EngineRecommendation, EngineType, StockfishOperatingMode } from '../types/chess';
 import { getDirectMoveInstruction } from '../utils/moveInstruction';
 import { OpeningPicker } from './OpeningPicker';
-import { EndgamePanels } from './EndgamePanels';
 import { OPENING_PRESETS, type OpeningChoice } from '../engine/openingIndex';
 import { getOpeningName } from '../engine/openingService';
 
 interface EngineCardsProps {
+  rodentPanel?: React.ReactNode;
   chess: Chess;
   recommendations: Record<EngineType, EngineRecommendation | null>;
   loadingStates: Record<EngineType, boolean>;
@@ -44,6 +44,7 @@ interface EngineCardsProps {
 }
 
 export const EngineCards: React.FC<EngineCardsProps> = ({
+  rodentPanel,
   chess,
   recommendations,
   loadingStates,
@@ -383,7 +384,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-300 min-w-0 break-words">{OPENING_PRESETS.find(p => p.id === garboOpening)?.name || (garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante seleccionada')}</span>
+            <span className="text-slate-300 min-w-0 break-words">{OPENING_PRESETS.find(p => p.id === garboOpening)?.name || (garboOpening === 'rodent-active' ? 'Apagado: Rodent activo' : garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante seleccionada')}</span>
             <button type="button" onClick={() => setOpeningPickerOpen(true)} title={garboStatusText} aria-label={garboStatusText} className={garboOpeningState?.status === 'deviated' ? 'p-1 text-amber-400' : 'p-1 text-emerald-400'}>
               {garboOpeningState?.status === 'deviated' ? <TriangleAlert size={18} /> : garboRec?.isBookMove ? <BookOpen size={18} /> : <Compass size={18} />}
             </button>
@@ -414,70 +415,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
         </div>
         {openingPickerOpen && <OpeningPicker selected={garboOpening} onSelect={id => { setRejectedGarboSystem(null); onChangeGarboOpening?.(id); }} onClose={() => setOpeningPickerOpen(false)} />}
 
-        {/* Maia 3 (Modelo Neuronal Humano con Flecha) */}
-        <div className="bg-slate-900/90 border border-purple-500/30 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-purple-500/60">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                  <Brain className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Maia 3</h4>
-                  <p className="text-[10px] text-purple-400 font-medium">Modelo Neuronal Humano</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {/* Elo Quick Selector */}
-                {onChangeMaiaElo && (
-                  <select
-                    value={maiaElo}
-                    onChange={(e) => onChangeMaiaElo(Number(e.target.value))}
-                    className="bg-purple-950/80 border border-purple-600/50 rounded-lg text-purple-200 text-[10px] font-bold px-1.5 py-0.5 focus:outline-none focus:border-purple-400 cursor-pointer"
-                    title="Calibrar nivel Elo de Maia (500 a 2400)"
-                  >
-                    <option value={500}>500 (Novato)</option>
-                    <option value={700}>700 Elo</option>
-                    <option value={900}>900 Elo</option>
-                    <option value={1100}>1100 (Club)</option>
-                    <option value={1300}>1300 Elo</option>
-                    <option value={1500}>1500 Elo</option>
-                    <option value={1700}>1700 Elo</option>
-                    <option value={1900}>1900 (Experto)</option>
-                    <option value={2100}>2100 Elo</option>
-                    <option value={2400}>2400 (Maestro)</option>
-                  </select>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onToggleArrow('maia')}
-                  className={`p-1 rounded text-slate-400 hover:text-white transition-colors ${
-                    arrowFilter.maia ? 'text-purple-400' : 'opacity-40'
-                  }`}
-                  title="Activar/desactivar flecha de Maia"
-                >
-                  {arrowFilter.maia ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-
-            {renderMoveBox(
-              maiaRec,
-              loadingStates.maia,
-              `Estimando elección humana para ${maiaElo} Elo...`,
-              'maia'
-            )}
-          </div>
-
-          <div className="pt-2 mt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Prob. humana: {maiaRec ? `${Math.round((maiaRec.humanProbability || 0.5) * 100)}%` : '—'}</span>
-            <span className="font-mono text-purple-300 font-bold bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/40">
-              Elo {maiaElo} (500–2400)
-            </span>
-          </div>
-        </div>
+        {rodentPanel}
 
         {/* Motor Personal (Identidad Propia del Jugador) */}
         {(() => {
@@ -569,7 +507,6 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             </div>
           );
         })()}
-        <EndgamePanels chess={chess} />
       </div>
     </div>
   );

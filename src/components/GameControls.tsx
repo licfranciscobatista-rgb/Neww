@@ -138,16 +138,6 @@ export const GameControls: React.FC<GameControlsProps> = ({
       </div>
 
       <div className="flex items-center gap-1.5">
-        {lastMoveSan && (
-          <button
-            onClick={handleInspectHumanity}
-            className="px-2.5 py-1.5 rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-600/40 text-purple-300 font-bold flex items-center gap-1.5 transition-colors shadow-sm"
-            title="Verificar si la última jugada cumple patrones humanos"
-          >
-            <Brain className="w-3.5 h-3.5 text-purple-400" />
-            <span>Auditar Humanidad ({lastMoveSan})</span>
-          </button>
-        )}
 
         <button
           onClick={handleCopyFen}
