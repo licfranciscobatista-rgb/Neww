@@ -1,0 +1,14 @@
+require('tsx/cjs');
+const assert = require('node:assert/strict');
+const { Chess } = require('chess.js');
+const { buildGameReplay } = require('../src/engine/gameReplay.ts');
+const replay = buildGameReplay({ pgn: '1. e4 e5 2. Nf3 *' });
+assert.equal(replay.fens.length, 4);
+assert.deepEqual(replay.moves, ['e4', 'e5', 'Nf3']);
+assert.equal(new Chess(replay.fens[0]).history().length, 0);
+assert.equal(new Chess(replay.fens[1]).get('e4').type, 'p');
+const custom = new Chess('4k3/8/8/8/8/8/4P3/4K3 w - - 0 20'); custom.move('e4');
+assert.equal(buildGameReplay({ pgn: custom.pgn() }).fens[0], '4k3/8/8/8/8/8/4P3/4K3 w - - 0 20');
+assert.equal(buildGameReplay({ moves: [{ san: 'e4' }, { san: 'e5' }] }).moves.length, 2);
+assert.throws(() => buildGameReplay({ pgn: 'not a valid game' }));
+console.log('PASS: replay positions, PGN, custom start, stored moves and invalid records.');
