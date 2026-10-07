@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { CandidateArrow, EngineRecommendation, EngineType } from '../types/chess';
+import type { EndgameArrow } from './EndgamePanels';
+import { BoardPieces } from './BoardPieces';
 
 interface ChessBoardProps {
   chess: Chess;
@@ -15,25 +17,13 @@ interface ChessBoardProps {
   interactive?: boolean;
   isRivalTurn?: boolean;
   indicatorStyle?: 'dot' | 'arrow';
+  endgameArrows?: EndgameArrow[];
+  rodentArrow?: { from: string; to: string } | null;
+  systemThreat?: { from: string; to: string } | null;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
-
-const PIECE_SYMBOLS: Record<string, string> = {
-  p: '♟',
-  n: '♞',
-  b: '♝',
-  r: '♜',
-  q: '♛',
-  k: '♚',
-  P: '♙',
-  N: '♘',
-  B: '♗',
-  R: '♖',
-  Q: '♕',
-  K: '♔',
-};
 
 export const ENGINE_COLORS: Record<
   EngineType,
@@ -94,6 +84,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   interactive = true,
   isRivalTurn = false,
   indicatorStyle = 'dot',
+  endgameArrows = [],
+  rodentArrow = null,
+  systemThreat = null,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
@@ -265,25 +258,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   />
                 )}
 
-                {piece && (
-                  <span
-                    className={`relative z-20 text-3xl sm:text-4xl md:text-5xl font-serif select-none pointer-events-none ${
-                      piece.color === 'w'
-                        ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                        : 'text-stone-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)]'
-                    }`}
-                  >
-                    {piece.color === 'w'
-                      ? PIECE_SYMBOLS[piece.type.toUpperCase()]
-                      : PIECE_SYMBOLS[piece.type.toLowerCase()]}
-                  </span>
-                )}
               </div>
             );
           })
         )}
       </div>
 
+      <BoardPieces chess={chess} orientation={boardOrientation} />
       <svg
         className="absolute inset-0 w-full h-full pointer-events-none z-30"
         viewBox="0 0 800 800"
@@ -368,6 +349,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </marker>
         </defs>
 
+        {[...endgameArrows, ...(rodentArrow ? [{ ...rodentArrow, kind: 'rodent' as const }] : []), ...(systemThreat ? [{ ...systemThreat, kind: 'rival' as const }] : [])].map(arrow => {
+          const start = getSquareCoordinates(arrow.from);
+          const end = getSquareCoordinates(arrow.to);
+          const color = arrow.kind === 'rival' ? '#fbbf24' : arrow.kind === 'mate' ? '#fb7185' : arrow.kind === 'rodent' ? '#84cc16' : '#22d3ee';
+          const angle = Math.atan2(end.y - start.y, end.x - start.x);
+          const tipX = end.x - 20 * Math.cos(angle);
+          const tipY = end.y - 20 * Math.sin(angle);
+          return <g key={arrow.kind} data-endgame-arrow={arrow.kind}>
+            <line x1={start.x} y1={start.y} x2={tipX} y2={tipY} stroke={color} strokeWidth="10" strokeOpacity="0.85" />
+            <polygon points={`${end.x},${end.y} ${tipX - 13 * Math.sin(angle)},${tipY + 13 * Math.cos(angle)} ${tipX + 13 * Math.sin(angle)},${tipY - 13 * Math.cos(angle)}`} fill={color} />
+            <text x={end.x + 15} y={end.y - 20} fill={color} fontSize="19" fontWeight="bold">{arrow.kind === 'rival' ? 'Rival posible' : arrow.kind === 'mate' ? 'Mate' : arrow.kind === 'rodent' ? 'Rodent' : 'Tablas'}</text>
+          </g>;
+        })}
         {moveEngineMap.map((group, idx) => {
           const start = getSquareCoordinates(group.from);
           const end = getSquareCoordinates(group.to);
