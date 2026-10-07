@@ -151,15 +151,25 @@ export function App() {
     setGameReadiness(previous => previous?.verificationComplete ? previous : report);
     return report;
   }, [profile.gamesPlayed, games.length]);
-  const verificationRef = useRef<Promise<GameReadinessReport> | null>(null);
-  const verifyEnginesBeforePlay = useCallback(() => {
+  const hasVerifiedOnceRef = useRef(false);
+  const verifyEnginesBeforePlay = useCallback((force = false) => {
+    if (hasVerifiedOnceRef.current && !force) {
+      return Promise.resolve(gameReadiness || subDirector.consultReadiness(profile.gamesPlayed || games.length));
+    }
     if (!verificationRef.current) {
       const base = subDirector.consultReadiness(profile.gamesPlayed || games.length);
       setGameReadiness({ ...base, verificationComplete: false });
-      verificationRef.current = verifyStartup(base).then(report => { controlDirector.recordStartupVerification(report); setGameReadiness(report); return report; }).finally(() => { verificationRef.current = null; });
+      verificationRef.current = verifyStartup(base).then(report => {
+        controlDirector.recordStartupVerification(report);
+        setGameReadiness(report);
+        hasVerifiedOnceRef.current = true;
+        return report;
+      }).finally(() => {
+        verificationRef.current = null;
+      });
     }
     return verificationRef.current;
-  }, [profile.gamesPlayed, games.length]);
+  }, [profile.gamesPlayed, games.length, gameReadiness]);
 
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -441,8 +451,10 @@ export function App() {
     supervisorRef.current?.setStockfishMode(mode, chess);
   }, [chess]);
 
-  const handleStartNewGame = async (options: NewGameOptions) => {
-    await verifyEnginesBeforePlay();
+  const handleStartNewGame = (options: NewGameOptions) => {
+    if (!hasVerifiedOnceRef.current) {
+      void verifyEnginesBeforePlay();
+    }
     setSystemsMode(options.systemsMode === true);
     if (rodentSystem) setArrowFilter(previous => ({ ...previous, garbo: true }));
     setRodentSystem(null);
