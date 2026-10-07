@@ -201,7 +201,7 @@ export function App() {
     triggerSupervisor(chess);
     void realStockfish.init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+  }, [gameId, triggerSupervisor]);
 
   useEffect(() => { void verifyEnginesBeforePlay(); }, []);
 
