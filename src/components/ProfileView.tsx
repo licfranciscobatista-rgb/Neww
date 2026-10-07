@@ -346,7 +346,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile, onUpdateProfi
               ) : dashboard.history.manualGames > 0 ? (
                 <>
                   <CheckCircle2 className="w-3 h-3 text-amber-400" />
-                  <span>Motor Personal Activo (Calibrando: {dashboard.history.manualGames}/10)</span>
+                  <span>Motor Personal en aprendizaje ({dashboard.history.manualGames}/10)</span>
                 </>
               ) : (
                 <>

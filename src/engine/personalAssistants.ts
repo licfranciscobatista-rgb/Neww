@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 import { GameRecord } from '../types/chess';
 import { lookupTheory, distillBookMove, getNextTheoryMoves } from './theoryBook';
+import { uniqueTrainingGames, validatedTrainingMoves } from './personalTraining';
 
 export interface DistilledMoveData {
   san: string;
@@ -76,7 +77,7 @@ export class HistoryAssistant {
 
       // Invalidate learned data when an older game is edited or removed.
       const currentKey = JSON.stringify(games.map((game) => [game.id, game.result, game.playerColor,
-        game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime])]));
+        game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime, move.fenBefore, move.from, move.to])]));
       if (this.cachedResult && this.cacheKey === currentKey) {
         return this.cachedResult;
       }
@@ -101,36 +102,16 @@ export class HistoryAssistant {
       let bishopsCount = 0;
       let rooksCount = 0;
 
-      for (const game of games) {
+      for (const game of uniqueTrainingGames(games)) {
         if (!game) continue;
         const pgnLength = (game.pgn || '').length;
         rawBytes += Math.max(pgnLength, (game.moves?.length || 0) * 120);
 
-        let moves = game.moves || [];
-        // Soporte integral: si game.moves viene vacío pero existe game.pgn, parsear movimientos directamente
-        if (moves.length === 0 && game.pgn) {
-          try {
-            const pgnChess = new Chess();
-            pgnChess.loadPgn(game.pgn);
-            const historyVerbose = pgnChess.history({ verbose: true });
-            moves = historyVerbose.map((m, idx) => ({
-              from: m.from,
-              to: m.to,
-              san: m.san,
-              ply: idx + 1,
-              fenBefore: m.before,
-              source: 'MANUAL' as const,
-              thinkTime: 10,
-              timestamp: Date.now(),
-            }));
-          } catch {
-            // Ignorar errores si el PGN está malformado
-          }
-        }
+        const moves = validatedTrainingMoves(game);
 
         const hasManualMoves = moves.some((m, i) => m && m.source === 'MANUAL' &&
-          (i % 2 === 0 ? 'w' : 'b') === game.playerColor);
-        if (hasManualMoves) {
+          m.fenBefore?.split(' ')[1] === game.playerColor);
+        if (hasManualMoves && ['1-0', '0-1', '1/2-1/2'].includes(game.result)) {
           manualGamesCount++;
         }
 
@@ -148,9 +129,7 @@ export class HistoryAssistant {
           const isUserBookMove = getNextTheoryMoves(sanHistory).includes(san);
           sanHistory.push(san);
 
-          const isUserTurn =
-            (i % 2 === 0 && game.playerColor === 'w') ||
-            (i % 2 === 1 && game.playerColor === 'b');
+          const isUserTurn = m.fenBefore?.split(' ')[1] === game.playerColor;
 
           // Filtrar y descartar jugadas asistidas con IA
           if (!isUserTurn) continue;
@@ -171,7 +150,7 @@ export class HistoryAssistant {
             }
 
             const isCapture = san.includes('x');
-            const isCheck = san.includes('+');
+            const isCheck = san.includes('+') || san.includes('#');
             const isProphylactic = ['h3', 'a3', 'h6', 'a6', 'Kh1', 'Kh8', 'g3', 'g6'].some((s) =>
               san.startsWith(s)
             );
@@ -202,7 +181,7 @@ export class HistoryAssistant {
               if (i >= 30) endgameMovesCount++;
             }
 
-            const think = Math.max(1, Math.min(120, m.thinkTime || 12));
+            const think = Number.isFinite(m.thinkTime) && m.thinkTime! >= 0 ? Math.min(120, m.thinkTime!) : 0;
             totalThinkTime += think;
 
             const moveObj: DistilledMoveData = {

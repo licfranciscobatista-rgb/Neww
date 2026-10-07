@@ -1,6 +1,7 @@
 import { Chess, Move, Square } from 'chess.js';
 import { GameRecord } from '../types/chess';
 import { DistilledUserData, StyleAssistant } from './personalAssistants';
+import { uniqueTrainingGames, validatedTrainingMoves } from './personalTraining';
 
 /**
  * Representación de un nodo en el Árbol Posicional del Jugador (Grafo FEN).
@@ -66,19 +67,7 @@ export class PlayerGraphSubEngine {
     game: GameRecord,
     graph: Map<string, PlayerPositionNode>
   ): void {
-    let moves = game.moves || [];
-    if (!moves.length && game.pgn) {
-      try {
-        const imported = new Chess();
-        imported.loadPgn(game.pgn);
-        moves = imported.history({ verbose: true }).map((move, index) => ({
-          from: move.from, to: move.to, san: move.san, fenBefore: move.before,
-          ply: index + 1, source: 'MANUAL' as const,
-        }));
-      } catch {
-        return;
-      }
-    }
+    const moves = validatedTrainingMoves(game);
     if (!moves.length) return;
     const sim = moves[0].fenBefore ? new Chess(moves[0].fenBefore) : new Chess();
     const userColor = game.playerColor || 'w';
@@ -122,7 +111,7 @@ export class PlayerGraphSubEngine {
         if (isLoss) node.losses++;
 
         const san = m.san;
-        const uci = `${m.from}${m.to}`;
+        const uci = `${m.from}${m.to}${m.san.includes('=') ? m.san.split('=')[1][0].toLowerCase() : ''}`;
         if (!node.movesChosen[san]) {
           node.movesChosen[san] = { san, uci, count: 0, wins: 0, draws: 0, losses: 0 };
         }
@@ -141,7 +130,7 @@ export class PlayerGraphSubEngine {
   }
 
   public static buildGraph(games: GameRecord[]): Map<string, PlayerPositionNode> {
-    const gamesToProcess = games.slice(0, 50);
+    const gamesToProcess = uniqueTrainingGames(games).slice(0, 50);
     const hash = JSON.stringify(gamesToProcess.map((game) => [game.id, game.result, game.playerColor, game.pgn,
       game.moves?.map((move) => [move.san, move.source, move.fenBefore])]));
     if (this.cachedGraph && this.cachedGamesHash === hash) {

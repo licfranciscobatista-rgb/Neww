@@ -16,7 +16,6 @@ import {
 import { GameRecord } from '../types/chess';
 import { saveGameRecord, deleteGameRecord } from '../storage/chessStorage';
 import { downloadFile } from '../utils/downloadFile';
-import { GameReplayModal } from './GameReplayModal';
 
 interface HistoryViewProps {
   games: GameRecord[];
@@ -32,7 +31,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onRefreshGames,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [replayGame, setReplayGame] = useState<GameRecord | null>(null);
   const [pgnInput, setPgnInput] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -103,7 +101,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto p-2 sm:p-4 text-xs text-slate-200">
-      {replayGame && <GameReplayModal game={replayGame} onClose={() => setReplayGame(null)}/>}
       <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-800">
         <div>
           <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -254,12 +251,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
-                  onClick={() => setReplayGame(game)}
+                  onClick={() => onLoadGame(game)}
                   className="px-2.5 py-1.5 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-600/40 rounded-lg font-bold flex items-center gap-1 transition-colors text-[11px]"
                   title="Cargar y reproducir en el tablero"
                 >
                   <Play className="w-3.5 h-3.5 fill-sky-300" />
-                  <span>Ver partida</span>
+                  <span>Jugar / Ver</span>
                 </button>
 
                 <button

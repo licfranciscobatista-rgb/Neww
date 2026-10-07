@@ -168,8 +168,8 @@ export function compilePersonalEngineDNA(
     engineReadiness: {
       isFullyCalibrated: isCalibrated,
       calibrationProgress: `${distilled.manualGamesCount}/10 partidas (${Math.min(100, Math.round((distilled.manualGamesCount / 10) * 100))}%)`,
-      activeInBoard: distilled.manualGamesCount > 0,
-      operationalMode: distilled.manualGamesCount > 0 ? 'SOVEREIGN_EXECUTION' : 'CALIBRATION_STANDBY',
+      activeInBoard: isCalibrated,
+      operationalMode: isCalibrated ? 'SOVEREIGN_EXECUTION' : 'CALIBRATION_STANDBY',
     },
   };
 }

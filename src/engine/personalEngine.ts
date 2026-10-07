@@ -193,8 +193,8 @@ export function getPersonalEngineStatus(
 ): PersonalEngineStatus {
   try {
     const storedGames = games || loadGameRecords();
-    const hash = JSON.stringify([includeDNA, storedGames.map((game) => [game.id, game.result,
-      game.playerColor, game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime])])]);
+    const hash = JSON.stringify([includeDNA, includeDNA ? profile : null, storedGames.map((game) => [game.id, game.result,
+      game.playerColor, game.pgn, game.moves?.map((move) => [move.san, move.source, move.thinkTime, move.fenBefore, move.from, move.to])])]);
 
     if (!currentChess && cachedPersonalStatus && cachedPersonalHash === hash) {
       return cachedPersonalStatus;
@@ -206,7 +206,7 @@ export function getPersonalEngineStatus(
 
     const effectiveGames = distilled.manualGamesCount;
     const requiredGames = 10;
-    const isUnlocked = effectiveGames >= 1;
+    const isUnlocked = effectiveGames >= requiredGames;
     const isFullyCalibrated = effectiveGames >= requiredGames;
     const progressPercent = Math.min(100, Math.round((effectiveGames / requiredGames) * 100));
 
