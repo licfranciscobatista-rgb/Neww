@@ -51,7 +51,7 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({ isOpen, onClose, onS
       {choices('Oponente', mode, [['vs_ai', 'IA Offline'], ['manual_board', 'Tablero manual']], setMode)}
       {choices('Tiempo', time, [[180, '3 min'], [300, '5 min'], [600, '10 min'], [900, '15 min'], [0, 'Sin fin']], setTime)}
       {choices('Líneas y flechas', lines, [['my_turn_only', 'Mi turno'], ['both_turns', 'Ambos turnos'], ['none', 'Sin líneas']], setLines)}
-      <button disabled={checking} onClick={async () => { setChecking(true); try { await onStartGame({ userColor: side === 'random' ? Math.random() < 0.5 ? 'w' : 'b' : side, gameMode: mode, timeControlSeconds: time, showLinesMode: lines, stockfishMode, systemsMode }); } finally { setChecking(false); } }} className="w-full flex justify-center items-center gap-2 bg-sky-600 rounded p-3 text-sm font-bold disabled:opacity-60"><Play size={17}/>{checking ? 'Verificando motores...' : 'Comenzar partida'}</button>
+      <button disabled={checking} onClick={async () => { setChecking(true); try { await onStartGame({ userColor: side === 'random' ? Math.random() < 0.5 ? 'w' : 'b' : side, gameMode: mode, timeControlSeconds: time, showLinesMode: lines, stockfishMode, systemsMode }); } finally { setChecking(false); } }} className="w-full flex justify-center items-center gap-2 bg-sky-600 rounded p-3 text-sm font-bold disabled:opacity-60"><Play size={17}/>{checking ? 'Iniciando partida...' : 'Comenzar partida'}</button>
     </section>
   </div>;
 };

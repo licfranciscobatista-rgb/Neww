@@ -473,8 +473,8 @@ export function App() {
     supervisorRef.current?.setGarboOpening(proposal.id, chess);
   };
 
-  const handleStartNewGame = async (options: NewGameOptions) => {
-    await verifyEnginesBeforePlay();
+  const handleStartNewGame = (options: NewGameOptions) => {
+    // The Subdirector verifies startup independently; creating a game never requests another audit.
     setSystemsMode(options.systemsMode === true);
     setActiveTab('board');
     if (rodentSystem) setArrowFilter(previous => ({ ...previous, garbo: true }));
