@@ -41,16 +41,19 @@ export async function analyzeGarbo(chess: Chess, selected: string, userColor: 'w
   }
   const system = OPENING_PRESETS.find(item => item.id === selected)?.name || opening.name || 'el sistema elegido';
 
-  if (chess.turn() === userColor && (!opening.uci || chess.inCheck())) {
-    const plan = await planSystem(chess, effectiveSystem, position => realGarbo.analyze(position, { movetime: 100 }));
+  if (chess.turn() === userColor) {
+    const plan = await planSystem(chess, effectiveSystem, async position => {
+      const result = await realGarbo.analyze(position, { movetime: 100 });
+      return result ? { ...result, source: 'worker' as const } : null;
+    }, { preferredMove: opening.uci });
     if (plan) {
-      opening.status = 'deviated';
+      opening.status = plan.move === opening.uci ? 'book' : 'deviated';
       opening.notice = plan.reason;
       const move = new Chess(fen).move({ from: plan.move.slice(0, 2), to: plan.move.slice(2, 4), promotion: plan.move[4] });
       return { opening, rec: { engine: 'garbo', engineName: `GarboChess (${identification.name})`, move: plan.move,
         from: move.from, to: move.to, san: move.san, evaluation: plan.scoreCp / 100,
         evalDisplay: (plan.scoreCp >= 0 ? '+' : '') + (plan.scoreCp / 100).toFixed(1), depth: plan.depth,
-        isBookMove: false, explanation: plan.reason, color: '#059669' } };
+        isBookMove: plan.move === opening.uci, explanation: plan.reason, color: '#059669' } };
     }
     opening.notice = 'No se pudo comprobar una continuación del sistema. Sin recomendación inventada.';
     return { opening: { ...opening, status: 'unavailable' }, rec: null };

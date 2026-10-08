@@ -28,6 +28,7 @@ export function AssistanceBar({
   systemsMode = false,
   systemName,
   systemProgress,
+  systemControls,
 }: {
   chess: Chess;
   profile: PlayerProfile;
@@ -38,6 +39,7 @@ export function AssistanceBar({
   onChangeElo: (elo: number) => void;
   onVerdict: (san: string, verdict: HumanityVerdictResult) => void;
   onArrows: (fen: string, arrows: EndgameArrow[]) => void;
+  systemControls?: React.ReactNode;
   systemsMode?: boolean;
   systemName?: string;
   systemProgress?: { completed: number; total: number; percent: number };
@@ -107,75 +109,12 @@ export function AssistanceBar({
           </div>
         )}
 
-        {/* EN MODO SISTEMAS: Centinela de Avisos de Maia (Mates, Tablas y Colgadas) con Flecha Desactivable */}
-        {systemsMode && (
-          <div className="flex items-center gap-2 flex-wrap bg-slate-950/70 border border-purple-900/50 px-2.5 py-1.5 rounded-xl shadow-xs">
-            <div className="flex items-center gap-1.5 text-purple-300 font-bold">
-              <ShieldAlert size={15} className="text-purple-400 shrink-0" />
-              <span className="text-[11px] uppercase tracking-wide">Avisos Maia</span>
-            </div>
-
-            {/* Insignia dinámica de Alerta */}
-            <div
-              title={alertDetail}
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-bold border transition-all ${
-                isMate
-                  ? 'bg-rose-950/80 border-rose-500/70 text-rose-200 animate-pulse'
-                  : isBlunder
-                  ? 'bg-amber-950/80 border-amber-500/70 text-amber-200'
-                  : isDraw
-                  ? 'bg-sky-950/80 border-sky-500/70 text-sky-200'
-                  : 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
-              }`}
-            >
-              {isMate ? (
-                <Skull size={13} className="shrink-0 text-rose-300" />
-              ) : isBlunder ? (
-                <AlertTriangle size={13} className="shrink-0 text-amber-300" />
-              ) : isDraw ? (
-                <Scale size={13} className="shrink-0 text-sky-300" />
-              ) : (
-                <CheckCircle2 size={13} className="shrink-0 text-emerald-400" />
-              )}
-              <span className="truncate max-w-[200px] sm:max-w-[280px]">{alertText}</span>
-            </div>
-
-            {/* Flecha Desactivable de Aviso */}
-            <button
-              type="button"
-              onClick={onToggleMaia}
-              title={
-                maiaVisible
-                  ? 'Flecha de aviso activa en tablero. Toca para desactivar.'
-                  : 'Flecha de aviso desactivada. Toca para ver en tablero.'
-              }
-              aria-label="Alternar flecha de aviso"
-              aria-pressed={maiaVisible}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors ${
-                maiaVisible
-                  ? 'bg-purple-950/90 border-purple-500 text-purple-200 shadow-xs'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              {maiaVisible ? (
-                <Eye size={13} className="text-purple-300 shrink-0" />
-              ) : (
-                <EyeOff size={13} className="text-slate-500 shrink-0" />
-              )}
-              <span>Flecha {maiaVisible ? 'On' : 'Off'}</span>
-              {hasArrow && maia?.san && (
-                <span className="font-mono bg-black/40 px-1 py-0.2 rounded text-[10px] text-purple-300">
-                  {maia.san}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
+        {systemsMode && systemControls}
 
       </div>
 
       <div className="flex items-center gap-2.5 flex-wrap">
-        <button
+        {!systemsMode && <button
           type="button"
           disabled={!last}
           onClick={audit}
@@ -184,7 +123,7 @@ export function AssistanceBar({
         >
           <Brain size={15} />
           <span>Auditar Jugada{last ? ` (${last.san})` : ''}</span>
-        </button>
+        </button>}
 
         <EndgamePanels chess={chess} userColor={userColor} onArrows={onArrows} />
       </div>

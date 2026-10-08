@@ -6,7 +6,7 @@ import { loadGameRecords } from '../storage/chessStorage';
 import { ControlJsonInspector } from './control/ControlJsonInspector';
 import { verifyStartup } from '../engine/startupVerification';
 
-export const ControlView: React.FC = () => {
+export const ControlView: React.FC<{ systemsControl?: React.ReactNode }> = ({ systemsControl }) => {
   const [telemetry, setTelemetry] = useState(() => controlDirector.getTelemetry(loadGameRecords().length));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -44,6 +44,7 @@ export const ControlView: React.FC = () => {
         <strong>{check.name}</strong><span className={check.isOperational ? 'text-emerald-300' : 'text-amber-300'}>{check.statusText}</span>
       </div>)}
     </div>
+    {systemsControl}
     <details className="border-t border-slate-700 pt-3">
       <summary className="text-sm font-bold cursor-pointer">Diagnósticos avanzados</summary>
       <div className="mt-4 space-y-4 text-xs">

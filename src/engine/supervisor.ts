@@ -181,10 +181,8 @@ export class ChessSupervisor {
         san: result.rec.san, color: '#059669',
       });
       const recommendations = { ...this.state.recommendations, garbo: result.rec };
-      const identified = (selected === 'free' || selected === 'auto') && result.opening.activeSystem && !result.opening.provisional
-        ? result.opening.activeSystem : selected;
       this.state = { ...this.state, recommendations, candidateArrows: arrows,
-        garboOpening: identified,
+        garboOpening: selected,
         garboOpeningState: result.opening, loadingStates: { ...this.state.loadingStates, garbo: false },
         agreements: this.computeAgreements(recommendations) };
       this.onStateChange({ ...this.state });

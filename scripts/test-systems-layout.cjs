@@ -10,18 +10,27 @@ require.extensions['.tsx'] = (module, filename) => module._compile(transformSync
   { loader: 'tsx', format: 'cjs', target: 'es2020', sourcefile: filename }
 ).code, filename);
 
-const { RodentPanel } = require('../src/components/RodentPanel.tsx');
+const { SystemsRodent, SystemsDecision, SystemsControl } = require('../src/components/SystemsWorkspace.tsx');
+const { emptySystemsSnapshot } = require('../src/engine/systemAssistants.ts');
 const { EngineCards } = require('../src/components/EngineCards.tsx');
 const noop = () => {};
 const chess = new Chess();
-const rodent = renderToStaticMarkup(React.createElement(RodentPanel, {
-  chess, gameId: 'layout-test', userColor: 'w', selected: 'free', garboLoading: false,
-  activeSystem: null, systemsMode: true, onAccept: noop, onResumeGarbo: noop,
-  onArrow: noop, onThreat: noop, onMove: noop, onChangeSystem: noop,
-}));
-assert.match(rodent, /Cambiar sistema desde Rodent/);
-assert.match(rodent, /Fijar sistema detectado/);
+const snapshot = emptySystemsSnapshot(chess, 'w', 'london', 'layout-test', 7);
+snapshot.loading = false;
+const rodent = renderToStaticMarkup(React.createElement(SystemsRodent, { snapshot, onMove: noop }));
+assert.match(rodent, /Sin alternativa distinta comprobada/);
+assert.ok(!rodent.includes('Cambiar sistema'));
+assert.ok(!rodent.includes('Jugar alternativa'));
 assert.match(rodent, /Sistema Londres/);
+const decision = renderToStaticMarkup(React.createElement(SystemsDecision, { snapshot, visible: true, onToggle: noop, onAccept: noop, onReject: noop, onAdopt: noop }));
+assert.ok(!decision.includes('Adoptar'));
+assert.ok(!decision.includes('Elegir otro'));
+assert.match(decision, /Flechas On/);
+snapshot.proposal = { id: 'queens-gambit', name: 'Gambito de Dama', fen: chess.fen(), sourceSystem: 'london', reason: 'Comprobado' };
+const proposed = renderToStaticMarkup(React.createElement(SystemsDecision, { snapshot, visible: false, onToggle: noop, onAccept: noop, onReject: noop, onAdopt: noop }));
+assert.match(proposed, /Aceptar cambio/); assert.match(proposed, /Mantener actual/); assert.match(proposed, /Flechas Off/);
+const helpers = renderToStaticMarkup(React.createElement(SystemsControl, { snapshot, limit: 7, onLimit: noop }));
+assert.equal((helpers.match(/<details/g) || []).length, 6);
 for (const removed of ['Radar del Sistema', 'Vigilancia Táctica', 'Agresivo', 'Sólido', 'Dinámico', 'Plan de Profilaxis']) {
   assert.ok(!rodent.includes(removed), `Removed control still visible: ${removed}`);
 }

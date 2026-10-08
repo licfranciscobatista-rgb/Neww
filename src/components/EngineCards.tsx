@@ -28,6 +28,7 @@ interface EngineCardsProps {
   stockfishRemainingUses: number;
   garboRemainingUses: number;
   garboOpening?: string;
+  garboPreferredOpening?: string;
   garboOpeningState?: OpeningChoice;
   onChangeGarboOpening?: (id: string) => void;
   stockfishMode?: StockfishOperatingMode;
@@ -55,6 +56,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   stockfishRemainingUses,
   garboRemainingUses,
   garboOpening = 'free',
+  garboPreferredOpening,
   garboOpeningState,
   onChangeGarboOpening,
   stockfishMode = 'per_request',
@@ -483,7 +485,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                     <p className="text-[11px] text-slate-200 leading-relaxed">
                       {garboRec.explanation || instr.tacticalIntent}
                     </p>
-                    {garboOpeningState?.notice && (
+                    {garboOpeningState?.notice && garboOpeningState.notice !== garboRec.explanation && (
                       <p className="text-[10px] text-emerald-400/90 pt-0.5 border-t border-emerald-900/40">
                         {garboOpeningState.notice}
                       </p>
@@ -523,7 +525,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           <OpeningPicker
             title="Preferencias iniciales de Garbo"
             preferencesOnly
-            selected={garboOpening}
+            selected={garboPreferredOpening || garboOpening}
             userColor={userColor}
             onSelect={id => {
               onChangeGarboOpening?.(id);

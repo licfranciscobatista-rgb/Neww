@@ -1,0 +1,6 @@
+Downloaded source: https://lichess.org/study/h1UkaRmb.pgn
+Study: 700 Opening Traps - Bill Wall PART-6, by shuvashish76.
+Only factual move sequences and their source chapter links are distributed.
+Annotations and book prose are not included. 11 main lines passed legal checkmate validation.
+Classic patterns: Scholar's mate, Legal's mate, Fool's mate.
+This is a bounded verified catalogue, not every possible chess trap.

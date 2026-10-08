@@ -21,6 +21,7 @@ interface ChessBoardProps {
   rodentArrow?: { from: string; to: string } | null;
   systemThreat?: { from: string; to: string } | null;
   systemsMode?: boolean;
+  trapArrow?: { from: string; to: string } | null;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -89,6 +90,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   rodentArrow = null,
   systemThreat = null,
   systemsMode = false,
+  trapArrow = null,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
@@ -354,17 +356,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </marker>
         </defs>
 
-        {[...endgameArrows, ...(rodentArrow ? [{ ...rodentArrow, kind: 'rodent' as const }] : []), ...(systemThreat ? [{ ...systemThreat, kind: 'rival' as const }] : [])].map(arrow => {
+        {[...endgameArrows, ...(trapArrow ? [{ ...trapArrow, kind: 'trap' as const }] : []), ...(rodentArrow ? [{ ...rodentArrow, kind: 'rodent' as const }] : []), ...(systemThreat ? [{ ...systemThreat, kind: 'rival' as const }] : [])].map(arrow => {
           const start = getSquareCoordinates(arrow.from);
           const end = getSquareCoordinates(arrow.to);
-          const color = arrow.kind === 'rival' ? '#fbbf24' : arrow.kind === 'mate' ? '#fb7185' : arrow.kind === 'rodent' ? '#84cc16' : '#22d3ee';
+          const color = arrow.kind === 'trap' ? '#e11d48' : arrow.kind === 'rival' ? '#fbbf24' : arrow.kind === 'mate' ? '#fb7185' : arrow.kind === 'rodent' ? '#84cc16' : '#22d3ee';
           const angle = Math.atan2(end.y - start.y, end.x - start.x);
           const tipX = end.x - 20 * Math.cos(angle);
           const tipY = end.y - 20 * Math.sin(angle);
           return <g key={arrow.kind} data-endgame-arrow={arrow.kind}>
             <line x1={start.x} y1={start.y} x2={tipX} y2={tipY} stroke={color} strokeWidth="10" strokeOpacity="0.85" />
             <polygon points={`${end.x},${end.y} ${tipX - 13 * Math.sin(angle)},${tipY + 13 * Math.cos(angle)} ${tipX + 13 * Math.sin(angle)},${tipY - 13 * Math.cos(angle)}`} fill={color} />
-            <text x={end.x + 15} y={end.y - 20} fill={color} fontSize="19" fontWeight="bold">{arrow.kind === 'rival' ? 'Rival posible' : arrow.kind === 'mate' ? 'Mate' : arrow.kind === 'rodent' ? 'Rodent' : 'Tablas'}</text>
+            <text x={end.x + 15} y={end.y - 20} fill={color} fontSize="19" fontWeight="bold">{arrow.kind === 'trap' ? 'Trampa' : arrow.kind === 'rival' ? 'Rival posible' : arrow.kind === 'mate' ? 'Mate' : arrow.kind === 'rodent' ? 'Rodent' : 'Tablas'}</text>
           </g>;
         })}
         {moveEngineMap.map((group, idx) => {

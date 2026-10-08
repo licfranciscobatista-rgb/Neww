@@ -13,7 +13,7 @@ export interface SystemEngineResult {
   scoreCp: number;
   mate?: number;
   depth: number;
-  source?: 'wasm' | 'fallback';
+  source?: 'wasm' | 'worker' | 'fallback';
 }
 export type SystemAnalyzer = (fen: string) => Promise<SystemEngineResult | null>;
 export interface SystemPlan {
@@ -23,7 +23,7 @@ export interface SystemPlan {
   san: string;
   scoreCp: number;
   depth: number;
-  source?: 'wasm' | 'fallback';
+  source?: 'wasm' | 'worker' | 'fallback';
   gain: number;
   status: 'following' | 'recovering' | 'defending' | 'unrecoverable';
   reason: string;
@@ -36,16 +36,32 @@ export function systemGoalScore(board: Chess, id: string): number {
   const details = SYSTEM_DETAILS_MAP[id];
   if (!details) return 0;
   let score = 0;
+  const bishopGroups = new Map<number, number>();
   for (const [square, type] of details.goals) {
     const piece = board.get(square);
-    if (piece?.color === details.color && piece.type === type) score += type === 'p' ? 18 : 24;
+    if (type === 'b') {
+      const parity = (square.charCodeAt(0) + Number(square[1])) % 2;
+      const exact = piece?.color === details.color && piece.type === type;
+      const active = board.board().flat().some(p => p?.color === details.color && p.type === 'b' &&
+        (p.square.charCodeAt(0) + Number(p.square[1])) % 2 === parity && !['1', '8'].includes(p.square[1]));
+      bishopGroups.set(parity, Math.max(bishopGroups.get(parity) || 0, exact ? 24 : active ? 12 : 0));
+    } else if (piece?.color === details.color && piece.type === type) score += type === 'p' ? 18 : 24;
+    else if (type === 'p') {
+      const advanced = board.board().flat().some(p => p?.color === details.color && p.type === 'p' && p.square[0] === square[0] &&
+        (details.color === 'w' ? Number(p.square[1]) > Number(square[1]) : Number(p.square[1]) < Number(square[1])));
+      if (advanced) score += 12;
+    }
   }
+  score += [...bishopGroups.values()].reduce((sum, value) => sum + value, 0);
   const home = details.color === 'w' ? '1' : '8';
   for (const file of ['b', 'c', 'f', 'g']) {
     const piece = board.get(`${file}${home}` as Square);
     if (!piece || piece.color !== details.color || !['b', 'n'].includes(piece.type)) score += 3;
   }
-  if (board.get(`g${home}` as Square)?.type === 'k' && board.get(`g${home}` as Square)?.color === details.color) score += 12;
+  if (['g', 'c'].some(file => board.get(`${file}${home}` as Square)?.type === 'k' && board.get(`${file}${home}` as Square)?.color === details.color)) score += 12;
+  for (const square of details.keySquares) {
+    if (board.attackers(square as Square, details.color).length) score += 2;
+  }
   return score;
 }
 
@@ -56,7 +72,7 @@ export function identifySystem(board: Chess, color: 'w' | 'b', preferred = 'free
   const own = board.history({ verbose: true }).filter(m => m.color === color);
   const firstWhite = board.history({ verbose: true }).find(m => m.color === 'w')?.san;
   const ranked = candidates.map(p => {
-    let score = systemGoalScore(board, p.id);
+    let score = systemGoalScore(board, p.id) - systemGoalScore(new Chess(), p.id);
     if (p.id === (color === 'w' ? 'london' : 'kings-indian')) score += 1;
     if (color === 'w') {
       if (own[0]?.san === 'd4') score += ['london', 'queens-gambit'].includes(p.id) ? 15 : -20;
@@ -86,7 +102,7 @@ export function identifySystem(board: Chess, color: 'w' | 'b', preferred = 'free
 
 // Bound tactical verification to a few candidates; workers do the expensive search.
 export async function planSystem(board: Chess, id: string, analyze: SystemAnalyzer,
-  options: { alternativeTo?: string; cancelled?: () => boolean } = {}): Promise<SystemPlan | null> {
+  options: { alternativeTo?: string; strictAlternative?: boolean; preferredMove?: string; cancelled?: () => boolean } = {}): Promise<SystemPlan | null> {
   const cancelled = options.cancelled || (() => false);
   if (board.isGameOver() || !isSystemCompatibleWithColor(id, board.turn())) return null;
   const details = SYSTEM_DETAILS_MAP[id];
@@ -107,6 +123,8 @@ export async function planSystem(board: Chess, id: string, analyze: SystemAnalyz
     const main = ranked.find(item => item.uci === options.alternativeTo);
     if (main && !pool.includes(main)) pool.push(main);
   }
+  const preferred = ranked.find(item => item.uci === options.preferredMove);
+  if (preferred && !pool.includes(preferred)) pool.push(preferred);
   const evaluated: Array<typeof principal & { score: number; verified: boolean }> = [];
   for (const candidate of pool) {
     if (cancelled()) return null;
@@ -114,29 +132,39 @@ export async function planSystem(board: Chess, id: string, analyze: SystemAnalyz
     if (candidate.next.isDraw()) { evaluated.push({ ...candidate, score: 0, verified: true }); continue; }
     const reply = await analyze(candidate.next.fen());
     if (!reply) continue;
-    evaluated.push({ ...candidate, score: reply.mate !== undefined && reply.mate > 0 ? -100000 : -reply.scoreCp,
-      verified: reply.source !== 'fallback' && root.source !== 'fallback' });
+    evaluated.push({ ...candidate, score: reply.mate !== undefined ? (reply.mate > 0 ? -100000 : 100000) : -reply.scoreCp,
+      verified: ['wasm', 'worker'].includes(reply.source || '') && ['wasm', 'worker'].includes(root.source || '') });
   }
   if (cancelled()) return null;
-  const bestScore = Math.max(root.scoreCp, ...evaluated.map(item => item.score));
+  const rootScore = root.mate !== undefined ? (root.mate > 0 ? 100000 : -100000) : root.scoreCp;
+  const bestScore = Math.max(rootScore, ...evaluated.map(item => item.score));
   const safe = evaluated.filter(item => item.score >= bestScore - 70);
   const thematic = safe.filter(item => item.gain > 0);
   const choices = thematic.length ? thematic : safe;
   choices.sort((a, b) => b.gain - a.gain || b.score - a.score);
   const alternatives = choices.filter(item => item.uci !== options.alternativeTo);
-  const chosen = alternatives[0] || choices[0];
-  const selected = chosen || { ...principal, score: root.scoreCp, verified: root.source !== 'fallback' };
+  const strictChoices = alternatives.filter(item => item.verified && item.gain >= 0);
+  if (options.strictAlternative && (!options.alternativeTo || !strictChoices.length)) return null;
+  const chosen = options.strictAlternative ? strictChoices[0]
+    : choices.find(item => item.uci === options.preferredMove) || alternatives[0] || choices[0];
+  const selected = chosen || evaluated.filter(item => item.verified).sort((a, b) => b.score - a.score)[0]
+    || { ...principal, score: rootScore, verified: false };
   const lost = lostSystemObjective(board, id) && !ranked.some(item => item.gain > 0);
   const unsafeGoals = evaluated.some(item => item.gain > 0 && item.verified) &&
     !evaluated.some(item => item.gain > 0 && item.verified && item.score >= bestScore - 100);
-  const changeNeeded = selected.verified && root.scoreCp < -100 && (lost || unsafeGoals);
-  const status = lost && changeNeeded ? 'unrecoverable' : selected.gain > 0 ? (ownDevelopmentStarted(board, details.color) ? 'recovering' : 'following') : 'defending';
-  const reason = selected.gain > 0 ? 'Construye o recupera objetivos del sistema con respuesta rival comprobada.'
+  const changeNeeded = selected.verified && rootScore < -100 && (lost || unsafeGoals);
+  const status = lost && changeNeeded ? 'unrecoverable' : unsafeGoals ? 'defending' : selected.gain > 0 ? (ownDevelopmentStarted(board, details.color) ? 'recovering' : 'following') : 'defending';
+  const target = details.goals.find(([square, type]) => square === selected.move.to && type === selected.move.piece);
+  const reason = unsafeGoals ? 'Las continuaciones temáticas comprobadas pierden evaluación; esta respuesta prioriza la defensa de la posición.'
+    : selected.gain > 0 ? target
+      ? `${selected.move.san} desarrolla un objetivo de ${details.name} en ${target[0]}; se comparó la respuesta rival.`
+      : `${selected.move.san} adapta el desarrollo o la estructura de ${details.name}; se comparó la respuesta rival.`
     : lost ? 'Falta una pieza esencial del esquema; atiende la posición mientras se evalúa un cambio.'
     : 'Defensa o maniobra temporal: no se ha comprobado una mejora segura del esquema.';
   return { fen, systemId: id, move: selected.uci, san: selected.move.san, scoreCp: selected.score,
-    depth: root.depth, source: root.source, gain: selected.gain, status, reason: root.source === 'fallback' ? `Respaldo heurístico: ${reason}` : reason,
-    changeNeeded, rootScore: root.scoreCp, systemScore: evaluated.filter(item => item.gain > 0).reduce<number | null>((best, item) => best === null ? item.score : Math.max(best, item.score), null) };
+    depth: root.depth, source: selected.verified ? root.source : root.source === 'fallback' ? 'fallback' : undefined,
+    gain: selected.gain, status, reason: selected.verified ? reason : `Sin respuesta rival verificada; ${selected.move.san} es una continuación provisional del esquema.`,
+    changeNeeded, rootScore, systemScore: evaluated.filter(item => item.gain > 0 && item.verified).reduce<number | null>((best, item) => best === null ? item.score : Math.max(best, item.score), null) };
 }
 
 function ownDevelopmentStarted(board: Chess, color: 'w' | 'b'): boolean {

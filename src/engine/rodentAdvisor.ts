@@ -190,7 +190,7 @@ export async function getLiveRodentRecommendation(
     contrastWithGarbo,
     isAlternativeToGarbo,
     systemPlan,
-    source: analysis.source,
+    source: analysis.source === 'wasm' ? 'wasm' : analysis.source === 'fallback' ? 'fallback' : undefined,
   };
 }
 
@@ -210,14 +210,14 @@ export async function getLiveRivalThreat(board: Chess, selectedSystem = 'london'
 
 export async function proposeSaferSystem(board: Chess, current: SystemPlan, analyze: SystemAnalyzer,
   cancelled = () => false): Promise<SystemProposal | null> {
-  if (!current.changeNeeded || current.source === 'fallback' || current.fen !== board.fen() || board.isGameOver()) return null;
+  if (!current.changeNeeded || current.source !== 'wasm' || current.fen !== board.fen() || board.isGameOver()) return null;
   const presets = OPENING_PRESETS.filter(p => p.color === board.turn() && p.id !== current.systemId)
     .sort((a, b) => systemGoalScore(board, b.id) - systemGoalScore(board, a.id)).slice(0, 3);
   const proposals: SystemProposal[] = [];
   for (const preset of presets) {
     if (cancelled()) return null;
     const plan = await planSystem(board, preset.id, analyze, { cancelled });
-    if (!plan || plan.source === 'fallback' || plan.status === 'unrecoverable' || plan.gain <= 0 ||
+    if (!plan || plan.source !== 'wasm' || plan.status === 'unrecoverable' || plan.gain <= 0 ||
       plan.scoreCp < (current.status === 'unrecoverable' ? current.scoreCp - 15 : (current.systemScore ?? current.scoreCp) + 100) ||
       plan.scoreCp < current.rootScore - 70) continue;
     proposals.push({ id: preset.id, sourceSystem: current.systemId, name: preset.name, fen: board.fen(),

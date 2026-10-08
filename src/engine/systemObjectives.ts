@@ -487,11 +487,21 @@ export function systemInterference(board: Chess, system: string, move: { from: s
   try { played = after.move(move); } catch { return null; }
   const capturedGoal = details.goals.find(([square, type]) => square === played.to && board.get(square)?.color === details.color && board.get(square)?.type === type);
   if (capturedGoal && played.captured) return `captura una pieza del esquema en ${played.to}; hay que reconstruir ese objetivo.`;
+  if (played.captured) return `captura material propio en ${played.to}; conservar las piezas también es necesario para sostener ${details.name}.`;
   for (const [square, type] of details.goals) {
     if (after.get(square)?.color !== details.color || after.get(square)?.type !== type) continue;
     const beforeAttackers = board.attackers(square, played.color);
     const addedPressure = after.attackers(square, played.color).some(attacker => !beforeAttackers.includes(attacker));
     if (addedPressure) return `crea presión sobre ${square}, un objetivo del sistema; protege o reubica esa pieza para conservar el plan.`;
+  }
+  if (after.isCheck()) return `da jaque; la seguridad del rey tiene prioridad sobre la formación de ${details.name}.`;
+  for (const piece of after.board().flat()) {
+    if (!piece || piece.color !== details.color) continue;
+    const beforeAttackers = board.attackers(piece.square, played.color);
+    if (after.attackers(piece.square, played.color).some(attacker => !beforeAttackers.includes(attacker))) {
+      const names = { p: 'peón', n: 'caballo', b: 'alfil', r: 'torre', q: 'dama', k: 'rey' };
+      return `amenaza el ${names[piece.type]} en ${piece.square}; comprueba su defensa antes de continuar ${details.name}.`;
+    }
   }
   return null;
 }

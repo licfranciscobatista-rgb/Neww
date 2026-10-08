@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Chess, Square } from 'chess.js';
+import { TrapHunter } from './components/TrapHunter';
 import {
   Gamepad2,
   FileText,
@@ -46,6 +47,9 @@ import { ChessBoard } from './components/ChessBoard';
 import { ActiveLinesBar } from './components/ActiveLinesBar';
 import { EngineCards } from './components/EngineCards';
 import { GameControls } from './components/GameControls';
+import { useSystemsAssistants } from './hooks/useSystemsAssistants';
+import { SystemsDecision, SystemsRodent, SystemsControl } from './components/SystemsWorkspace';
+import { loadSystemPreferences, saveSystemPreferences, favoriteForColor } from './engine/systemPreferences';
 import { AssistanceBar } from './components/AssistanceBar';
 import { RodentPanel, type RodentArrow } from './components/RodentPanel';
 import type { EndgameArrow } from './components/EndgamePanels';
@@ -117,6 +121,11 @@ export function App() {
   // Line recommendation preferences (default: only on player turn to eliminate lag)
   const [showLinesMode, setShowLinesMode] = useState<ShowLinesMode>('my_turn_only');
   const [systemsMode, setSystemsMode] = useState(false);
+  const [trapArrow, setTrapArrow] = useState<{ fen: string; move: string | null }>({ fen: '', move: null });
+  const handleTrapArrow = useCallback((fen: string, move: string | null) => setTrapArrow({ fen, move }), []);
+  const [systemPreferences, setSystemPreferences] = useState(loadSystemPreferences);
+  const [systemArrowsVisible, setSystemArrowsVisible] = useState(true);
+  const [rejectedSystemFen, setRejectedSystemFen] = useState('');
 
   // Engine arrow filters (Stockfish, Maia y Personal con flechas; Garbo como recomendación teórica)
   const [arrowFilter, setArrowFilter] = useState<Record<EngineType, boolean>>({
@@ -456,6 +465,14 @@ export function App() {
     supervisorRef.current?.setStockfishMode(mode, chess);
   }, [chess]);
 
+  const systemsSnapshot = useSystemsAssistants(chess, userColor, supervisorState.garboOpening || 'free', gameId,
+    systemsMode, supervisorState.recommendations.garbo?.move, supervisorState.loadingStates.garbo, systemPreferences.transitionMoves);
+  const systemDecision = systemsSnapshot && rejectedSystemFen === chess.fen() ? { ...systemsSnapshot, proposal: null } : systemsSnapshot;
+  const acceptSystemProposal = (proposal: import('./engine/rodentAdvisor').SystemProposal) => {
+    if (proposal.fen !== chess.fen() || proposal.sourceSystem !== supervisorState.garboOpening || !isSystemCompatibleWithColor(proposal.id, userColor)) return;
+    supervisorRef.current?.setGarboOpening(proposal.id, chess);
+  };
+
   const handleStartNewGame = async (options: NewGameOptions) => {
     await verifyEnginesBeforePlay();
     setSystemsMode(options.systemsMode === true);
@@ -488,9 +505,7 @@ export function App() {
         // En Modo Sistemas: forzar sistema predeterminado según el bando del jugador:
         // Blancas -> london (Sistema Londres)
         // Negras -> kings-indian (Defensa India de Rey) o sistema compatible previamente seleccionado
-        const currentSelected = supervisorState.garboOpening;
-        const isCompatible = currentSelected && currentSelected !== 'free' && currentSelected !== 'rodent-active' && isSystemCompatibleWithColor(currentSelected, options.userColor);
-        const forcedSystem = currentSelected === 'free' || currentSelected === 'auto' ? currentSelected : isCompatible ? currentSelected : 'free';
+        const forcedSystem = favoriteForColor(systemPreferences, options.userColor);
         supervisorRef.current.setGarboOpening(forcedSystem, freshChess);
       } else if (supervisorState.garboOpening === 'rodent-active') {
         supervisorRef.current.setGarboOpening(previousGarboSystem, freshChess);
@@ -827,8 +842,9 @@ export function App() {
               {/* Left Column: Board and Game Controls */}
               <div className="lg:col-span-6 xl:col-span-7 flex flex-col items-center space-y-3">
                 <ChessBoard
-                  systemThreat={systemsMode && systemThreat.fen === chess.fen() ? systemThreat.arrow : null}
-                  rodentArrow={systemsMode && rodentArrow.fen === chess.fen() && !isRivalTurn ? rodentArrow.arrow : null}
+                  trapArrow={!systemsMode && trapArrow.fen === chess.fen() && trapArrow.move ? { from: trapArrow.move.slice(0, 2), to: trapArrow.move.slice(2, 4) } : null}
+                  systemThreat={systemsMode && systemArrowsVisible && systemsSnapshot?.threat ? { from: systemsSnapshot.threat.uci.slice(0, 2), to: systemsSnapshot.threat.uci.slice(2, 4) } : null}
+                  rodentArrow={systemsMode && systemArrowsVisible && systemsSnapshot?.alternative && !isRivalTurn ? { from: systemsSnapshot.alternative.move.slice(0, 2), to: systemsSnapshot.alternative.move.slice(2, 4) } : null}
                   endgameArrows={endgameState.fen === chess.fen() ? endgameState.arrows : []}
                   chess={chess}
                   boardOrientation={boardOrientation}
@@ -836,7 +852,7 @@ export function App() {
                   recommendations={supervisorState.recommendations}
                   candidateArrows={supervisorState.candidateArrows}
                   agreements={supervisorState.agreements}
-                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, personal: false, chessjs: false } : { ...arrowFilter, garbo: false }}
+                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, personal: false, chessjs: false, maia: false, garbo: arrowFilter.garbo && systemArrowsVisible } : { ...arrowFilter, garbo: false }}
                   onToggleEngineFilter={handleToggleArrow}
                   lastMove={lastMove}
                   interactive={!chess.isGameOver()}
@@ -848,7 +864,7 @@ export function App() {
                 <ActiveLinesBar
                   systemsMode={systemsMode}
                   recommendations={supervisorState.recommendations}
-                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, personal: false, chessjs: false } : arrowFilter}
+                  activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, personal: false, chessjs: false, maia: false, garbo: arrowFilter.garbo && systemArrowsVisible } : arrowFilter}
                   onToggleEngineFilter={handleToggleArrow}
                   isRivalTurn={isRivalTurn}
                   rivalColorLabel={userColor === 'w' ? 'Blancas' : 'Negras'}
@@ -878,6 +894,7 @@ export function App() {
                 />
 
                 {/* Segunda Barra: Asistencia de partida (Maia, Auditoría, Finales y Radar de Sistemas en 2º plano) */}
+                {!systemsMode && <TrapHunter board={chess} color={userColor} onArrow={handleTrapArrow} />}
                 {(() => {
                   const activeSys = identifySystem(chess, userColor, supervisorState.garboOpening || 'free').id;
                   const sysAnalysis = systemsMode ? getSystemAnalysis(chess, activeSys) : null;
@@ -902,6 +919,10 @@ export function App() {
                       onVerdict={(san, verdict) => setVerdictModalData({ san, verdict })}
                       onArrows={handleEndgameArrows}
                       systemsMode={systemsMode}
+                      systemControls={<SystemsDecision snapshot={systemDecision} visible={systemArrowsVisible}
+                        onToggle={() => setSystemArrowsVisible(value => !value)} onAccept={acceptSystemProposal}
+                        onReject={() => setRejectedSystemFen(chess.fen())}
+                        onAdopt={() => { if (systemsSnapshot) supervisorRef.current?.setGarboOpening(systemsSnapshot.systemId, chess); }} />}
                       systemName={sysAnalysis?.systemName}
                       systemProgress={
                         sysAnalysis
@@ -935,47 +956,21 @@ export function App() {
                 <EngineCards
                   systemsMode={systemsMode}
                   userColor={userColor}
-                  rodentPanel={systemsMode ? <RodentPanel chess={chess} gameId={gameId} userColor={userColor}
-                    systemsMode={systemsMode}
-                    onThreat={handleSystemThreat}
-                    selected={supervisorState.garboOpening || 'free'}
-                    currentMove={supervisorState.recommendations.garbo?.move}
-                    garboSan={supervisorState.recommendations.garbo?.san}
-                    garboLoading={supervisorState.loadingStates.garbo}
-                    activeSystem={rodentSystem}
-                    onArrow={handleRodentArrow}
-                    onMove={uci => executeMove(uci.slice(0, 2) as Square, uci.slice(2, 4) as Square, 'RODENT_ASSISTED', uci[4])}
-                    onAccept={proposal => {
-                      if (proposal.fen !== chess.fen() || proposal.sourceSystem !== supervisorState.garboOpening || chess.turn() !== userColor) return;
-                      setPreviousGarboSystem(supervisorState.garboOpening || 'free');
-                      if (!isSystemCompatibleWithColor(proposal.id, userColor)) return;
-                      setRodentSystem(null);
-                      setArrowFilter(previous => ({ ...previous, garbo: true }));
-                      supervisorRef.current?.setGarboOpening(proposal.id, chess);
-                    }}
-                    onResumeGarbo={() => {
-                      setRodentSystem(null);
-                      setArrowFilter(previous => ({ ...previous, garbo: true }));
-                      supervisorRef.current?.setGarboOpening(previousGarboSystem, chess);
-                    }}
-                    onChangeSystem={(id) => {
-                      if (!isSystemCompatibleWithColor(id, userColor)) return;
-                      setRodentSystem(null);
-                      setArrowFilter(previous => ({ ...previous, garbo: true }));
-                      supervisorRef.current?.setGarboOpening(id, chess);
-                    }} /> : null}
+                  rodentPanel={systemsMode ? <SystemsRodent snapshot={systemsSnapshot}
+                    onMove={uci => executeMove(uci.slice(0, 2) as Square, uci.slice(2, 4) as Square, 'RODENT_ASSISTED', uci[4])} /> : null}
                   chess={chess}
                   recommendations={supervisorState.recommendations}
                   loadingStates={supervisorState.loadingStates}
                   stockfishRemainingUses={supervisorState.stockfishRemainingUses}
                   garboRemainingUses={supervisorState.garboRemainingUses}
                   garboOpening={supervisorState.garboOpening}
+                  garboPreferredOpening={favoriteForColor(systemPreferences, userColor)}
                   garboOpeningState={supervisorState.garboOpeningState}
                   onChangeGarboOpening={(id) => {
                     if (!isSystemCompatibleWithColor(id, userColor)) return;
-                    setRodentSystem(null);
-                    setArrowFilter(previous => ({ ...previous, garbo: true }));
-                    supervisorRef.current?.setGarboOpening(id, chess);
+                    const updated = { ...systemPreferences, [userColor === 'w' ? 'white' : 'black']: id };
+                    setSystemPreferences(updated);
+                    saveSystemPreferences(updated);
                   }}
                   stockfishMode={supervisorState.stockfishMode}
                   onChangeStockfishMode={handleChangeStockfishMode}
@@ -1026,7 +1021,9 @@ export function App() {
         )}
 
         {activeTab === 'control' && (
-          <ControlView />
+          <ControlView systemsControl={<SystemsControl snapshot={systemsSnapshot} limit={systemPreferences.transitionMoves}
+            preferences={systemPreferences} onPreferences={value => { setSystemPreferences(value); saveSystemPreferences(value); }}
+            onLimit={value => { const updated = { ...systemPreferences, transitionMoves: Math.max(3, Math.min(12, Math.round(value) || 7)) }; setSystemPreferences(updated); saveSystemPreferences(updated); }} />} />
         )}
         {activeTab === 'analytics' && <div className="max-w-5xl mx-auto space-y-4">
           <h2 className="text-base font-bold">Métricas de partidas</h2>
