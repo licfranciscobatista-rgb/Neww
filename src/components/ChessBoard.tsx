@@ -20,6 +20,7 @@ interface ChessBoardProps {
   endgameArrows?: EndgameArrow[];
   rodentArrow?: { from: string; to: string } | null;
   systemThreat?: { from: string; to: string } | null;
+  systemsMode?: boolean;
 }
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -87,8 +88,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   endgameArrows = [],
   rodentArrow = null,
   systemThreat = null,
+  systemsMode = false,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+
+  // En Modo Sistemas, las sugerencias son exclusivamente flechas específicas
+  const effectiveIndicatorStyle = systemsMode ? 'arrow' : indicatorStyle;
 
   React.useEffect(() => {
     setSelectedSquare(null);
@@ -373,7 +378,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           const fillColor = isMultiple ? '#0284c7' : primaryColor.fill;
 
           // MODO PUNTO (Punto ultra-ligero de destino solicitado para juegos contrareloj sin lag)
-          if (indicatorStyle === 'dot') {
+          if (effectiveIndicatorStyle === 'dot') {
             return (
               <g key={`dot-${group.from}-${group.to}-${idx}`}>
                 {/* Halo pulsante de destino */}

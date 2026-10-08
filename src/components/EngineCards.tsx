@@ -22,6 +22,7 @@ interface EngineCardsProps {
   systemsMode?: boolean;
   rodentPanel?: React.ReactNode;
   chess: Chess;
+  userColor?: 'w' | 'b';
   recommendations: Record<EngineType, EngineRecommendation | null>;
   loadingStates: Record<EngineType, boolean>;
   stockfishRemainingUses: number;
@@ -48,6 +49,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   systemsMode = false,
   rodentPanel,
   chess,
+  userColor = 'w',
   recommendations,
   loadingStates,
   stockfishRemainingUses,
@@ -375,47 +377,226 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
           </div>
         </div>
 
-        <div className={`${systemsMode ? '' : 'hidden'} bg-slate-900/90 border border-emerald-500/30 rounded-lg p-3.5 flex flex-col gap-3`}>
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-bold text-emerald-300">GarboChess</h4>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => onToggleArrow('garbo')} title="Mostrar u ocultar flecha Garbo" aria-label="Mostrar u ocultar flecha Garbo" className="p-1.5 text-emerald-300">
-                {arrowFilter.garbo ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-              <button type="button" onClick={() => setOpeningPickerOpen(true)} title="Configurar apertura de Garbo" aria-label="Configurar apertura de Garbo" className="p-1.5 text-emerald-300"><Settings2 size={17} /></button>
+        {/* GarboChess (Motor de Sistema Principal) */}
+        <div className={`${systemsMode ? '' : 'hidden'} bg-slate-900/90 border border-emerald-500/40 rounded-xl p-3.5 flex flex-col justify-between shadow-lg relative overflow-hidden transition-all hover:border-emerald-500/70`}>
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <span>GarboChess</span>
+                    <span className="text-[10px] font-mono text-emerald-400 font-semibold px-1 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/40">
+                      Sistema
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-emerald-400 font-medium">Motor de Sistema & Estructura</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onToggleArrow('garbo')}
+                  title={arrowFilter.garbo ? 'Ocultar flecha de Garbo' : 'Mostrar flecha de Garbo'}
+                  className={`p-1.5 rounded transition-colors ${
+                    arrowFilter.garbo ? 'text-emerald-300 bg-emerald-950/40 border border-emerald-700/50' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {arrowFilter.garbo ? <Eye size={15} /> : <EyeOff size={15} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpeningPickerOpen(true)}
+                  title="Configurar apertura o sistema"
+                  className="p-1.5 text-emerald-300 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 rounded border border-slate-700 transition-colors flex items-center gap-1 text-[11px] font-bold"
+                >
+                  <Settings2 size={14} />
+                  <span>Cambiar</span>
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-300 min-w-0 break-words">{OPENING_PRESETS.find(p => p.id === garboOpening)?.name || (garboOpening === 'rodent-active' ? 'Apagado: Rodent activo' : garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante seleccionada')}</span>
-            <button type="button" onClick={() => setOpeningPickerOpen(true)} title={garboStatusText} aria-label={garboStatusText} className={garboOpeningState?.status === 'deviated' ? 'p-1 text-amber-400' : 'p-1 text-emerald-400'}>
-              {garboOpeningState?.status === 'deviated' ? <TriangleAlert size={18} /> : garboRec?.isBookMove ? <BookOpen size={18} /> : <Compass size={18} />}
-            </button>
-          </div>
-          <div className="flex-1 min-h-20 flex items-center justify-between gap-3 border-y border-slate-800 py-3">
-            {loadingStates.garbo ? <LoaderCircle size={22} className="animate-spin text-emerald-400" aria-label="Garbo calculando" /> :
-              garboRec ? <><span className="text-lg font-bold text-white">{garboRec.san}</span>
-                <span className="text-xs text-emerald-300">{garboRec.evalDisplay}</span></> :
-              <span className="text-slate-500" title={garboOpeningState?.notice || 'Garbo no está disponible'}>{garboOpeningState?.notice?.includes('en pausa') ? 'En pausa' : '—'}</span>}
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-slate-400 min-w-0 break-words" title={garboOpeningState?.detected}>{garboOpeningState?.detected ? `Variante: ${garboOpeningState.detected}` : ''}</span>
-            <button type="button" onClick={() => garboRec && onApplyRecommendationMove?.(garboRec.move, 'garbo')}
-              disabled={!garboRec || loadingStates.garbo || isRivalTurn} aria-label="Jugar recomendación de Garbo" title="Jugar recomendación de Garbo"
-              className="p-2 rounded bg-emerald-700 text-white disabled:opacity-30 shrink-0"><ArrowRight size={18} /></button>
-          </div>
-          {!loadingStates.garbo && garboOpeningState?.notice && <p role="status" className={`mt-2 text-xs leading-relaxed break-words ${garboOpeningState.status === 'deviated' ? 'text-amber-300' : 'text-slate-300'}`}>{garboOpeningState.notice}</p>}
-          {!loadingStates.garbo && garboOpeningState?.suggestedSystem && rejectedGarboSystem !== garboOpening && <div className="mt-2 border-t border-slate-700 pt-2 text-xs">
-            <p className="text-slate-300 break-words">Continuación reconocida: {garboOpeningState.suggestedSystem.name}</p>
-            <div className="flex gap-2 mt-2">
-              <button type="button" className="px-3 py-2 rounded bg-emerald-700 text-white" onClick={() => {
-                setRejectedGarboSystem(null);
-                onChangeGarboOpening?.(garboOpeningState.suggestedSystem!.id);
-              }}>Aceptar cambio</button>
-              <button type="button" className="px-3 py-2 rounded bg-slate-800 text-slate-300" onClick={() => setRejectedGarboSystem(garboOpening)}>Mantener en pausa</button>
+
+            {/* Sistema seleccionado y estado de teoría */}
+            <div className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-slate-950/60 border border-slate-800 my-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-emerald-400 font-bold truncate">
+                  {OPENING_PRESETS.find(p => p.id === garboOpening)?.name || (garboOpening === 'rodent-active' ? 'Rodent activo' : garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante')}
+                </span>
+                {garboOpeningState?.detected && (
+                  <span className="text-[9px] text-slate-400 font-mono truncate hidden sm:inline">
+                    ({garboOpeningState.detected})
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                garboRec?.isBookMove
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-600/40'
+                  : 'bg-blue-950/60 text-blue-300 border-blue-600/40'
+              }`}>
+                {garboRec?.isBookMove ? 'Teoría ECO' : 'Adaptación Táctica'}
+              </span>
             </div>
-          </div>}
+
+            {/* Caja de Jugada de GarboChess */}
+            {loadingStates.garbo ? (
+              <div className="py-5 flex items-center justify-center gap-2 text-xs text-slate-400 animate-pulse">
+                <LoaderCircle size={18} className="animate-spin text-emerald-400" />
+                <span>GarboChess calculando jugada de sistema...</span>
+              </div>
+            ) : garboRec ? (() => {
+              const instr = getDirectMoveInstruction(chess, garboRec.from, garboRec.to, garboRec.san);
+              return (
+                <div className="space-y-2.5 my-1">
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-950/60 border border-emerald-600/40 flex items-center justify-center text-xl shadow-inner shrink-0 text-emerald-300">
+                        {instr.pieceSymbol}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-white block truncate">
+                          {instr.actionTitle}
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-400 block font-semibold">
+                          {instr.fromToLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <span className="text-sm font-black font-mono text-white block">
+                        {garboRec.san}
+                      </span>
+                      <span className="text-[10px] text-emerald-300 font-bold">
+                        {garboRec.evalDisplay}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Explicación Pedagógica del Sistema ("Más texto") */}
+                  <div className="bg-emerald-950/30 border border-emerald-800/40 rounded-lg p-2.5 space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-300">
+                      <span>Concepto del Sistema</span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {garboRec.isBookMove ? 'Repertorio Estándar' : 'Cálculo de Motor'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-200 leading-relaxed">
+                      {garboRec.explanation || instr.tacticalIntent}
+                    </p>
+                    {garboOpeningState?.notice && (
+                      <p className="text-[10px] text-emerald-400/90 pt-0.5 border-t border-emerald-900/40">
+                        {garboOpeningState.notice}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Botón de 1-clic para jugar la jugada */}
+                  <button
+                    type="button"
+                    disabled={isRivalTurn || chess.isGameOver()}
+                    onClick={() => onApplyRecommendationMove?.(garboRec.move, 'garbo')}
+                    className={`w-full py-2 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm ${
+                      isRivalTurn
+                        ? 'bg-slate-800/40 border-slate-700/40 text-slate-500 cursor-not-allowed'
+                        : 'bg-emerald-700 hover:bg-emerald-600 border-emerald-600 hover:border-emerald-500 text-white active:scale-[0.99]'
+                    }`}
+                  >
+                    <span>
+                      {isRivalTurn
+                        ? 'Esperando tu turno...'
+                        : `Jugar con Garbo: ${instr.pieceName} a ${garboRec.to.toUpperCase()} (${garboRec.san})`}
+                    </span>
+                    {!isRivalTurn && <ArrowRight className="w-3.5 h-3.5 text-emerald-200" />}
+                  </button>
+                </div>
+              );
+            })() : (
+              <div className="text-center py-4 text-xs text-slate-400">
+                {chess.isGameOver() ? 'Partida finalizada' : 'GarboChess analizando posición...'}
+              </div>
+            )}
+          </div>
+
+          {/* Sugerencia de Sistema tras el primer movimiento (Modo Libre) o por desvío de apertura */}
+          {!loadingStates.garbo && garboOpeningState?.suggestedSystem && rejectedGarboSystem !== garboOpening && (
+            <div className={`mt-2 border-t pt-2 text-xs ${
+              garboOpening === 'free'
+                ? 'border-emerald-500/50 bg-emerald-950/40 p-2.5 rounded-lg my-1'
+                : 'border-slate-700'
+            }`}>
+              {garboOpening === 'free' ? (
+                <div>
+                  <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>
+                      {chess.history().length >= 1
+                        ? `Sistema detectado tras jugada 1: ${garboOpeningState.suggestedSystem.name}`
+                        : `Sistema recomendado: ${garboOpeningState.suggestedSystem.name}`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                    {garboOpeningState.suggestedSystem.reason ||
+                      'En Modo Sistemas, la partida no debe ir sin esquema. Adopta este sistema para sincronizar las metas estratégicas de Garbo y Rodent.'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-transform active:scale-98 shadow-xs"
+                      onClick={() => {
+                        setRejectedGarboSystem(null);
+                        onChangeGarboOpening?.(garboOpeningState.suggestedSystem!.id);
+                      }}
+                    >
+                      ✓ Adoptar {garboOpeningState.suggestedSystem.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700"
+                      onClick={() => setOpeningPickerOpen(true)}
+                    >
+                      Elegir otro
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-slate-300">Variante reconocida: <strong className="text-emerald-300">{garboOpeningState.suggestedSystem.name}</strong></p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold"
+                      onClick={() => {
+                        setRejectedGarboSystem(null);
+                        onChangeGarboOpening?.(garboOpeningState.suggestedSystem!.id);
+                      }}
+                    >
+                      Adoptar {garboOpeningState.suggestedSystem.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
+                      onClick={() => setRejectedGarboSystem(garboOpening)}
+                    >
+                      Mantener actual
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        {openingPickerOpen && <OpeningPicker selected={garboOpening} onSelect={id => { setRejectedGarboSystem(null); onChangeGarboOpening?.(id); }} onClose={() => setOpeningPickerOpen(false)} />}
+        {openingPickerOpen && (
+          <OpeningPicker
+            selected={garboOpening}
+            userColor={userColor}
+            onSelect={id => {
+              setRejectedGarboSystem(null);
+              onChangeGarboOpening?.(id);
+            }}
+            onClose={() => setOpeningPickerOpen(false)}
+          />
+        )}
 
         {rodentPanel}
 

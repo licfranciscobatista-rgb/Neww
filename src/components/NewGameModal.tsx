@@ -37,7 +37,17 @@ export const NewGameModal: React.FC<NewGameModalProps> = ({ isOpen, onClose, onS
     <section role="dialog" aria-modal="true" aria-label="Nueva partida" className="bg-slate-900 border border-slate-600 rounded-lg max-w-md w-full max-h-[90dvh] overflow-y-auto p-5 space-y-5 text-slate-200">
       <div className="flex justify-between items-center"><h2 className="text-base font-bold">Nueva partida</h2><button disabled={checking} aria-label="Cerrar nueva partida" title="Cerrar" onClick={onClose} className="p-2 disabled:opacity-40"><X size={18}/></button></div>
       {choices('Mi bando', side, [['w', 'Blancas'], ['b', 'Negras'], ['random', 'Aleatorio']], setSide)}
-      {choices('Asistencia', systemsMode ? 'systems' : 'normal', [['normal', 'Juego'], ['systems', 'Sistemas']], value => setSystemsMode(value === 'systems'))}
+      <div>
+        {choices('Asistencia', systemsMode ? 'systems' : 'normal', [
+          ['normal', 'Juego (Multi-Motor)'],
+          ['systems', 'Sistemas (Garbo & Rodent)'],
+        ], value => setSystemsMode(value === 'systems'))}
+        <p className="text-[11px] text-slate-400 mt-1 pl-1">
+          {systemsMode
+            ? 'Modo Sistemas: GarboChess (Estructura), Rodent IV (Táctica), Radar de Objetivos y Vigilancia de Amenazas.'
+            : 'Modo Juego: Stockfish 19, Red Neuronal Maia 3, Motor Personal y Chess.js.'}
+        </p>
+      </div>
       {choices('Oponente', mode, [['vs_ai', 'IA Offline'], ['manual_board', 'Tablero manual']], setMode)}
       {choices('Tiempo', time, [[180, '3 min'], [300, '5 min'], [600, '10 min'], [900, '15 min'], [0, 'Sin fin']], setTime)}
       {choices('Líneas y flechas', lines, [['my_turn_only', 'Mi turno'], ['both_turns', 'Ambos turnos'], ['none', 'Sin líneas']], setLines)}

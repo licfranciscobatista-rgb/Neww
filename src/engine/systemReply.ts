@@ -13,7 +13,7 @@ export async function systemReply(board: Chess, move: string | null, analyze: An
   let chosen = candidates.find(item => item.candidate.from + item.candidate.to + (item.candidate.promotion || '') === reply?.uci);
   if (!chosen) {
     let best = -Infinity;
-    for (const candidate of candidates.slice(0, 12)) {
+    for (const candidate of candidates.slice(0, 2)) {
       const position = new Chess(next.fen()); position.move(candidate.candidate);
       if (position.isCheckmate()) { chosen = candidate; break; }
       const response = await analyze(position.fen());

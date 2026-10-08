@@ -15,6 +15,7 @@ import { realMaia, RealMaiaAnalysis } from './realMaia';
 import { analyzeGarbo } from './garboEngine';
 import type { OpeningChoice } from './openingIndex';
 import { runMaiaRecommendation } from './maiaEngine';
+import { getMaiaSentinelRecommendation } from './maiaSentinel';
 import { runPersonalRecommendation, getPersonalEngineStatus } from './personalEngine';
 import { runChessJsRecommendation } from './chessjsEngine';
 import { controlDirector, subDirector } from './controlDirector';
@@ -108,6 +109,7 @@ export class ChessSupervisor {
   private lastPositionKey = '';
   private lastUserColor: 'w' | 'b' = 'w';
   private lastShowLinesMode: 'my_turn_only' | 'both_turns' | 'none' = 'my_turn_only';
+  private lastSystemsMode = false;
   private stockfishRequestSerial = 0;
 
   constructor(onStateChange: (state: SupervisorState) => void) {
@@ -323,6 +325,7 @@ export class ChessSupervisor {
     userColor?: 'w' | 'b';
     gameMode?: 'vs_ai' | 'manual_board';
     showLinesMode?: 'my_turn_only' | 'both_turns' | 'none';
+    systemsMode?: boolean;
   }): void {
     const {
       gameId,
@@ -332,10 +335,12 @@ export class ChessSupervisor {
       userColor = 'w',
       gameMode = 'vs_ai',
       showLinesMode = 'my_turn_only',
+      systemsMode = false,
     } = params;
     this.lastProfile = profile;
     this.lastUserColor = userColor;
     this.lastShowLinesMode = showLinesMode;
+    this.lastSystemsMode = systemsMode;
     const fen = chess.fen();
 
     // Deduplicación: onPositionChange se dispara desde varios sitios (jugada, efecto de React, reloj).
@@ -347,6 +352,7 @@ export class ChessSupervisor {
       userColor,
       gameMode,
       showLinesMode,
+      systemsMode ? 'sys' : 'main',
       clockBucket,
       profile.maiaEloCalibration || 1100,
       profile.gamesPlayed || 0,
@@ -456,12 +462,13 @@ export class ChessSupervisor {
       const garboRec = null as EngineRecommendation | null;
       controlDirector.watchEngineExecution('garbo', performance.now() - garboStart);
 
-      // 3. Maia: Recomendación Teórica Humana
+      // 3. Maia:
+      // En Modo Sistemas: Centinela de Avisos (Mates, Tablas y Jugadas Malas / Colgadas)
+      // En Modo Principal: Recomendación Teórica Humana original según Elo calibrado
       const maiaStart = performance.now();
-      const maiaRec = runMaiaRecommendation(
-        chess,
-        profile.maiaEloCalibration || 1100
-      );
+      const maiaRec = this.lastSystemsMode
+        ? getMaiaSentinelRecommendation(chess, this.lastUserColor || 'w')
+        : runMaiaRecommendation(chess, profile.maiaEloCalibration || 1100);
       controlDirector.watchEngineExecution('maia', performance.now() - maiaStart);
 
       // 4. Motor Personal: Disponible y adaptándose activamente con detección anti-copia de Stockfish
@@ -516,9 +523,11 @@ export class ChessSupervisor {
           arrows.push({
             from: maiaRec.from,
             to: maiaRec.to,
-            label: `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
+            label: this.lastSystemsMode
+              ? `Aviso • ${maiaRec.san || maiaRec.evalDisplay}`
+              : `M • ${Math.round((maiaRec.humanProbability || 0.5) * 100)}% humana`,
             san: maiaRec.san,
-            color: '#7c3aed',
+            color: this.lastSystemsMode ? (maiaRec.color || '#a855f7') : '#7c3aed',
           });
         }
 

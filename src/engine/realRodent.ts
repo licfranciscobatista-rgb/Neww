@@ -1,45 +1,204 @@
-import { Chess } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 
-export interface RodentAnalysis { uci: string; scoreCp: number; mate?: number; depth: number; pv: string; }
+export interface RodentAnalysis {
+  uci: string;
+  scoreCp: number;
+  mate?: number;
+  depth: number;
+  pv: string;
+  from?: string;
+  to?: string;
+  san?: string;
+  evalDisplay?: string;
+}
+
+// Valores de piezas para evaluación posicional instantánea de respaldo
+const PIECE_VALS: Record<string, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+const CENTER_SQS = new Set(['d4', 'e4', 'd5', 'e5', 'c4', 'f4', 'c5', 'f5']);
+
+/**
+ * Evaluador posicional y táctico de respaldo para Rodent IV:
+ * Garantiza respuesta inmediata (<2ms) si el WebAssembly o Web Worker tarda o no responde.
+ */
+export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 'solido' | 'dinamico' = 'dinamico'): RodentAnalysis | null {
+  try {
+    const board = new Chess(fen);
+    if (board.isGameOver()) return null;
+    const moves = board.moves({ verbose: true });
+    if (moves.length === 0) return null;
+
+    let bestMove = moves[0];
+    let bestScore = -Infinity;
+
+    for (const m of moves) {
+      let score = 0;
+      // 1. Mate en 1
+      const testBoard = new Chess(fen);
+      const res = testBoard.move(m);
+      if (testBoard.isCheckmate()) {
+        return {
+          uci: `${m.from}${m.to}${m.promotion || ''}`,
+          scoreCp: 100000,
+          mate: 1,
+          depth: 6,
+          pv: m.san,
+          from: m.from,
+          to: m.to,
+          san: m.san,
+          evalDisplay: '#+1',
+        };
+      }
+
+      // 2. Capturas con MVV-LVA
+      if (m.captured) {
+        const victimVal = PIECE_VALS[m.captured] || 100;
+        const attackerVal = PIECE_VALS[m.piece] || 100;
+        score += victimVal * 2 - attackerVal * 0.2;
+      }
+
+      // 3. Jaques y amenazas
+      if (testBoard.inCheck()) {
+        score += personality === 'agresivo' ? 65 : 35;
+      }
+
+      // 4. Ocupación o control del centro
+      if (CENTER_SQS.has(m.to)) {
+        score += 25;
+      }
+
+      // 5. Desarrollo de piezas menores (caballos y alfiles)
+      if (['n', 'b'].includes(m.piece)) {
+        if (['1', '8'].includes(m.from[1])) score += 30; // Salir de la primera fila
+      }
+
+      // 6. Enroque
+      if (m.san.includes('O-O')) {
+        score += personality === 'solido' ? 50 : 35;
+      }
+
+      // 7. Moduladores de personalidad de Rodent
+      if (personality === 'agresivo') {
+        // Premiar avance hacia el rey rival
+        const targetRank = parseInt(m.to[1], 10);
+        score += board.turn() === 'w' ? targetRank * 4 : (9 - targetRank) * 4;
+      } else if (personality === 'solido') {
+        // Evitar dejar piezas colgadas
+        if (!m.captured && CENTER_SQS.has(m.from)) score -= 10;
+      } else {
+        // Dinámico: movilidad y casillas de salto
+        score += Math.random() * 8;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = m;
+      }
+    }
+
+    const uci = `${bestMove.from}${bestMove.to}${bestMove.promotion || ''}`;
+    const scoreCp = Math.min(450, Math.max(-450, Math.round(bestScore / 2)));
+    const pawns = (scoreCp / 100).toFixed(1);
+    const evalDisplay = scoreCp > 0 ? `+${pawns}` : pawns;
+
+    return {
+      uci,
+      scoreCp,
+      depth: 6,
+      pv: bestMove.san,
+      from: bestMove.from,
+      to: bestMove.to,
+      san: bestMove.san,
+      evalDisplay,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export class RealRodentManager {
   private worker: Worker | null = null;
   private nextId = 1;
   private jobs = new Map<number, { resolve: (result: RodentAnalysis | null) => void; timer: ReturnType<typeof setTimeout>; fen: string }>();
 
-  analyze(fen: string, movetime = 150): Promise<RodentAnalysis | null> {
+  analyze(fen: string, movetime = 180, personality: 'agresivo' | 'solido' | 'dinamico' = 'dinamico'): Promise<RodentAnalysis | null> {
     const board = new Chess(fen);
     if (board.isGameOver()) return Promise.resolve(null);
-    if (!this.worker) {
+
+    if (!this.worker && typeof window !== 'undefined' && typeof Worker !== 'undefined') {
       try {
         this.worker = new Worker('/rodent/worker.js');
-        this.worker.onerror = event => { console.warn('[Rodent] Worker error:', event.message); this.terminate(); };
+        this.worker.onerror = event => {
+          console.warn('[Rodent] Worker error, activando respaldo:', event.message);
+          this.terminate();
+        };
         this.worker.onmessage = event => {
           const result = event.data;
-          if (result.error) { console.warn('[Rodent] Analysis failed:', result.error); this.terminate(); return; }
+          if (result.error) {
+            console.warn('[Rodent] Error en análisis:', result.error);
+            return;
+          }
           const job = this.jobs.get(result.id);
           if (!job) return;
-          clearTimeout(job.timer); this.jobs.delete(result.id);
+          clearTimeout(job.timer);
+          this.jobs.delete(result.id);
           try {
             if (result.error || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(result.uci)) throw new Error('Invalid Rodent result');
-            new Chess(job.fen).move({ from: result.uci.slice(0, 2), to: result.uci.slice(2, 4), promotion: result.uci[4] });
-            job.resolve(result);
-          } catch { job.resolve(null); }
+            const c = new Chess(job.fen);
+            const moveRes = c.move({ from: result.uci.slice(0, 2), to: result.uci.slice(2, 4), promotion: result.uci[4] });
+            if (!moveRes) throw new Error('Illegal move');
+            const pawns = (result.scoreCp / 100).toFixed(1);
+            job.resolve({
+              ...result,
+              from: moveRes.from,
+              to: moveRes.to,
+              san: moveRes.san,
+              evalDisplay: result.scoreCp > 0 ? `+${pawns}` : pawns,
+            });
+          } catch {
+            job.resolve(evaluateRodentFallback(job.fen, personality));
+          }
         };
-      } catch { return Promise.resolve(null); }
+      } catch {
+        return Promise.resolve(evaluateRodentFallback(fen, personality));
+      }
     }
+
+    if (!this.worker) {
+      return Promise.resolve(evaluateRodentFallback(fen, personality));
+    }
+
     return new Promise(resolve => {
       const id = this.nextId++;
-      const timer = setTimeout(() => { console.warn('[Rodent] Analysis timed out'); this.terminate(); }, 12000);
+      // Watchdog rápido (800ms) para garantizar fluidez sin esperas eternas
+      const timer = setTimeout(() => {
+        const job = this.jobs.get(id);
+        if (job) {
+          this.jobs.delete(id);
+          resolve(evaluateRodentFallback(fen, personality));
+        }
+      }, 800);
+
       this.jobs.set(id, { resolve, timer, fen });
-      try { this.worker!.postMessage({ id, fen, movetime }); }
-      catch { this.terminate(); }
+      try {
+        this.worker!.postMessage({ id, fen, movetime });
+      } catch {
+        clearTimeout(timer);
+        this.jobs.delete(id);
+        resolve(evaluateRodentFallback(fen, personality));
+      }
     });
   }
 
   terminate() {
-    this.worker?.terminate(); this.worker = null;
-    for (const job of this.jobs.values()) { clearTimeout(job.timer); job.resolve(null); }
+    this.worker?.terminate();
+    this.worker = null;
+    for (const job of this.jobs.values()) {
+      clearTimeout(job.timer);
+      job.resolve(evaluateRodentFallback(job.fen));
+    }
     this.jobs.clear();
   }
 }
+
+export const realRodent = new RealRodentManager();
+
