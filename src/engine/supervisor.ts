@@ -172,7 +172,7 @@ export class ChessSupervisor {
   private async updateGarbo(chess: Chess, generation: number, selected: string): Promise<void> {
     const fen = chess.fen();
     try {
-      const result = await analyzeGarbo(chess, selected);
+      const result = await analyzeGarbo(chess, selected, this.lastUserColor);
       if (this.state.generation !== generation || this.state.garboOpening !== selected ||
           this.state.fen !== fen || this.state.isGameOver) return;
       const arrows = this.state.candidateArrows.filter(a => !isGarboArrow(a));
@@ -181,7 +181,10 @@ export class ChessSupervisor {
         san: result.rec.san, color: '#059669',
       });
       const recommendations = { ...this.state.recommendations, garbo: result.rec };
+      const identified = (selected === 'free' || selected === 'auto') && result.opening.activeSystem && !result.opening.provisional
+        ? result.opening.activeSystem : selected;
       this.state = { ...this.state, recommendations, candidateArrows: arrows,
+        garboOpening: identified,
         garboOpeningState: result.opening, loadingStates: { ...this.state.loadingStates, garbo: false },
         agreements: this.computeAgreements(recommendations) };
       this.onStateChange({ ...this.state });
@@ -615,7 +618,7 @@ export class ChessSupervisor {
 
       this.onStateChange(this.state);
       void this.updateGarbo(chess, generation, this.state.garboOpening || 'auto');
-      void this.refineMaiaWithRealEngine(fen, generation, profile.maiaEloCalibration || 1100);
+      if (!this.lastSystemsMode) void this.refineMaiaWithRealEngine(fen, generation, profile.maiaEloCalibration || 1100);
     });
 
     // Refinar de forma asíncrona con Stockfish 19 WASM real solo en el turno del jugador (180ms)
@@ -719,10 +722,11 @@ export class ChessSupervisor {
   }
 
   private async refineMaiaWithRealEngine(fen: string, generation: number, elo: number): Promise<void> {
+    if (this.lastSystemsMode) return;
     try {
       const real = await realMaia.analyze(fen, { selfElo: elo });
       if (!real) return;
-      if (this.state.generation !== generation || this.state.isGameOver) return;
+      if (this.state.generation !== generation || this.state.isGameOver || this.lastSystemsMode) return;
 
       const rec = maiaRecommendationFromReal(real);
       const shouldSuppress = this.shouldSuppressArrows(fen);

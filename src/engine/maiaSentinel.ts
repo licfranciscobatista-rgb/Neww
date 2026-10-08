@@ -2,7 +2,7 @@ import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
 import type { EngineRecommendation } from '../types/chess';
 
 export interface MaiaSentinelAlert {
-  type: 'mate' | 'mate_threat' | 'draw' | 'draw_risk' | 'blunder_risk' | 'blunder_punish' | 'safe';
+  type: 'mate' | 'mate_threat' | 'draw' | 'draw_risk' | 'blunder_risk' | 'blunder_punish' | 'safe' | 'waiting';
   severity: 'critical' | 'danger' | 'warning' | 'opportunity' | 'safe';
   badgeTitle: string;
   detail: string;
@@ -41,6 +41,20 @@ function switchFenTurn(fen: string): string | null {
   // Reset en-passant square if turn is flipped artificially
   parts[3] = '-';
   return parts.join(' ');
+}
+
+function profitableCaptures(board: Chess, color: Color) {
+  try {
+    const fen = board.turn() === color ? board.fen() : switchFenTurn(board.fen());
+    if (!fen) return [];
+    const copy = new Chess(fen);
+    return copy.moves({ verbose: true }).filter(m => {
+      if (!m.captured || m.captured === 'k') return false;
+      const next = new Chess(fen); next.move(m);
+      const recapture = next.moves({ verbose: true }).some(reply => reply.to === m.to && reply.captured);
+      return !recapture || PIECE_VALUES[m.captured] > PIECE_VALUES[m.piece];
+    });
+  } catch { return []; }
 }
 
 /**
@@ -91,8 +105,11 @@ export function evaluateMaiaSentinel(chess: Chess, userColor: 'w' | 'b'): MaiaSe
     };
   }
 
-  const turn = chess.turn();
+  if (chess.turn() !== userColor) return { type: 'waiting', severity: 'safe', badgeTitle: 'Turno rival', detail: 'Los avisos propios se actualizan cuando te corresponde mover.' };
+  const turn = userColor;
   const oppColor: Color = turn === 'w' ? 'b' : 'w';
+  const rivalCaptures = profitableCaptures(chess, oppColor);
+  const ownCaptures = profitableCaptures(chess, userColor);
   const legalMoves = chess.moves({ verbose: true });
 
   // =========================================================================
@@ -204,13 +221,13 @@ export function evaluateMaiaSentinel(chess: Chess, userColor: 'w' | 'b'): MaiaSe
       if (p.type === 'k') continue;
 
       const sq = `${String.fromCharCode(97 + c)}${8 - r}` as Square;
-      const attackers = chess.attackers(sq, oppColor);
+      const attackers = rivalCaptures.filter(m => m.to === sq).map(m => m.from);
       if (attackers.length === 0) continue;
 
       const defenders = chess.attackers(sq, turn);
 
       // Si hay más atacantes que defensores, o si está completamente indefensa
-      if (attackers.length > defenders.length || defenders.length === 0) {
+      if (attackers.length > 0) {
         hangingFriendlyPieces.push({
           sq,
           piece: p.type,
@@ -255,12 +272,12 @@ export function evaluateMaiaSentinel(chess: Chess, userColor: 'w' | 'b'): MaiaSe
       if (p.type === 'k') continue;
 
       const sq = `${String.fromCharCode(97 + c)}${8 - r}` as Square;
-      const ourAttackers = chess.attackers(sq, turn);
+      const ourAttackers = ownCaptures.filter(m => m.to === sq).map(m => m.from);
       if (ourAttackers.length === 0) continue;
 
       const oppDefenders = chess.attackers(sq, oppColor);
 
-      if (ourAttackers.length > oppDefenders.length || oppDefenders.length === 0) {
+      if (ourAttackers.length > 0) {
         opponentHangingPieces.push({
           sq,
           piece: p.type,
@@ -295,8 +312,8 @@ export function evaluateMaiaSentinel(chess: Chess, userColor: 'w' | 'b'): MaiaSe
   return {
     type: 'safe',
     severity: 'safe',
-    badgeTitle: '✓ Posición Segura',
-    detail: 'No se detectan amenazas de mate inminente, piezas colgadas ni riesgo de tablas.',
+    badgeTitle: 'Sin avisos inmediatos',
+    detail: 'La revisión limitada no encontró mate en una, capturas rentables inmediatas ni ahogado; no certifica que la posición sea segura.',
   };
 }
 
@@ -315,8 +332,7 @@ export function getMaiaSentinelRecommendation(chess: Chess, userColor: 'w' | 'b'
     san: alert.move?.san || '',
     evalDisplay: alert.badgeTitle,
     explanation: alert.detail,
-    confidence: alert.severity === 'safe' ? 50 : 95,
-    humanProbability: alert.severity === 'safe' ? 0.5 : 0.9,
+    confidence: alert.severity === 'safe' ? 50 : 75,
     color:
       alert.severity === 'critical' || alert.severity === 'danger'
         ? '#ef4444' // red-500

@@ -1,0 +1,78 @@
+require('tsx/cjs');
+const assert = require('node:assert/strict');
+const { Chess } = require('chess.js');
+const { identifySystem, planSystem } = require('../src/engine/systemsCoordinator.ts');
+const { getSystemAnalysis } = require('../src/engine/systemObjectives.ts');
+const { evaluateMaiaSentinel } = require('../src/engine/maiaSentinel.ts');
+const { proposeSaferSystem, getLiveRivalThreat } = require('../src/engine/rodentAdvisor.ts');
+const { RealRodentManager, evaluateRodentFallback } = require('../src/engine/realRodent.ts');
+const { realMaia } = require('../src/engine/realMaia.ts');
+const { ChessSupervisor } = require('../src/engine/supervisor.ts');
+const analyze = async fen => {
+  const board = new Chess(fen), move = board.moves({verbose:true})[0];
+  return move ? {uci:move.from + move.to + (move.promotion || ''),scoreCp:0,depth:4,source:'wasm'} : null;
+};
+function position(moves) { const b = new Chess(); moves.forEach(m => b.move(m)); return b; }
+(async () => {
+  assert.equal(identifySystem(new Chess(), 'w').provisional, true);
+  assert.equal(identifySystem(new Chess(), 'b').id, 'kings-indian');
+  assert.notEqual(identifySystem(new Chess(), 'b', 'london').id, 'london');
+  const london = position(['d4','d5','Bf4','Nf6']);
+  assert.equal(identifySystem(london, 'w').id, 'london');
+  assert.equal(identifySystem(london, 'w').provisional, false);
+  const sicilian = position(['e4','c5']);
+  assert.equal(identifySystem(sicilian, 'b').id, 'sicilian');
+  const fake = new Chess('7k/8/8/8/5b2/4p3/3p4/K7 w - - 0 1');
+  assert.notEqual(getSystemAnalysis(fake,'london').milestones[0].status,'completed');
+  const mate = new Chess('7k/5Q2/6K1/8/8/8/8/8 w - - 0 1');
+  assert.equal(evaluateMaiaSentinel(mate,'b').type,'waiting');
+  assert.equal(evaluateMaiaSentinel(mate,'w').type,'mate');
+  for (const moves of [['d4','a6'],['d4','d5','Bf4','c5'],['e4','c6']]) {
+    const b = position(moves), fen = b.fen(), id = moves[0] === 'e4' ? 'italian' : 'london';
+    const plan = await planSystem(b,id,analyze);
+    assert.ok(plan && plan.gain > 0);
+    assert.ok(new Chess(fen).move({from:plan.move.slice(0,2),to:plan.move.slice(2,4),promotion:plan.move[4]}));
+    assert.equal(b.fen(),fen);
+    assert.equal(plan.changeNeeded,false);
+    assert.equal(await proposeSaferSystem(b,plan,analyze),null,'No unsolicited system changes');
+  }
+  const black = position(['d4']);
+  assert.ok(await planSystem(black,'kings-indian',analyze));
+  assert.equal(await planSystem(black,'london',analyze),null);
+  let calls=0;
+  assert.equal(await planSystem(london,'london', async fen => {calls++;return analyze(fen)}, {cancelled:()=>true}),null);
+  assert.equal(calls,1);
+  const broken = new Chess(); broken.remove('c1');
+  const plan = await planSystem(broken,'london',analyze);
+  assert.equal(plan.changeNeeded,false,'A bishop exchange alone must not kill the system');
+  const endangered = {...plan,changeNeeded:true,status:'unrecoverable',scoreCp:-200,rootScore:-200,systemScore:-400};
+  const proposal = await proposeSaferSystem(broken,endangered,analyze);
+  assert.ok(proposal && proposal.id !== 'london' && proposal.sourceSystem === 'london');
+  assert.equal(await proposeSaferSystem(broken,{...endangered,source:'fallback'},analyze),null);
+  const dangerous = await planSystem(new Chess(),'london',async fen => {
+    const rec=await analyze(fen);return rec ? {...rec,scoreCp:new Chess(fen).turn()==='w' ? -200 : 500} : null;
+  });
+  assert.equal(dangerous.changeNeeded,true,'Unsafe thematic continuations require a checked change proposal');
+  assert.equal(dangerous.status,'defending');
+  const losing = evaluateRodentFallback('7k/7q/8/8/8/8/8/K7 w - - 0 1','solido');
+  assert.equal(losing.source,'fallback');assert.equal(losing.depth,1);assert.ok(losing.scoreCp < -800);
+  const jobs=[];
+  global.window={};
+  global.Worker=class { postMessage(job) { jobs.push(job);analyze(job.fen).then(rec=>this.onmessage({data:{id:job.id,...rec}})); } terminate(){} };
+  const manager=new RealRodentManager();
+  await manager.analyze(new Chess().fen(),100,'agresivo');
+  await manager.analyze(new Chess().fen(),100,'solido');
+  assert.equal(jobs[0].personality,'agresivo');assert.equal(jobs[1].personality,'solido');manager.terminate();
+  delete global.window;delete global.Worker;
+  const neural=realMaia.analyze;let neuralCalls=0;
+  realMaia.analyze=async()=>{neuralCalls++;return null};
+  const sup=new ChessSupervisor(()=>{});sup.lastSystemsMode=true;
+  await sup.refineMaiaWithRealEngine(new Chess().fen(),sup.getState().generation,1100);
+  assert.equal(neuralCalls,0);realMaia.analyze=neural;
+  const threat = await getLiveRivalThreat(position(['d4']),'london','w');
+  if (threat) assert.equal(position(['d4']).get(threat.from).color,'b');
+  const blackThreat = await getLiveRivalThreat(position(['d4','Nf6']),'kings-indian','b');
+  assert.ok(blackThreat);
+  assert.equal(position(['d4','Nf6']).get(blackThreat.from).color,'w');
+  console.log('PASS: system identification, colors, enemy pieces, own mate, recovery, cancellation, safe manual proposals, fallback provenance, personalities and sentinel isolation.');
+})().catch(e=>{console.error(e);process.exitCode=1});

@@ -444,11 +444,15 @@ const DEFAULT_DETAILS: SystemDetails = {
 
 export function getSystemAnalysis(board: Chess, systemId: string) {
   const details = SYSTEM_DETAILS_MAP[systemId] || DEFAULT_DETAILS;
+  const ownBoard = new Chess(board.fen());
+  for (const piece of board.board().flat()) {
+    if (piece && piece.color !== details.color) ownBoard.remove(piece.square);
+  }
   const milestones: SystemMilestone[] = details.milestones.map(m => ({
     id: m.id,
     title: m.title,
     description: m.description,
-    status: m.check(board),
+    status: m.check(ownBoard),
   }));
 
   return {

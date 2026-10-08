@@ -50,8 +50,8 @@ export function AssistanceBar({
   };
 
   // Determinar icono y estilo visual del aviso de Maia (Centinela)
-  const alertText = maia?.evalDisplay || '✓ Posición Segura';
-  const alertDetail = maia?.explanation || 'Sin peligro inminente de mates ni piezas colgadas.';
+  const alertText = maia?.evalDisplay || (chess.turn() !== userColor ? 'Turno rival' : 'Comprobando avisos');
+  const alertDetail = maia?.explanation || 'No hay una revisión propia completada para esta posición.';
   const hasArrow = Boolean(maia?.from && maia?.to);
 
   const isMate = alertText.toLowerCase().includes('mate');
@@ -172,21 +172,6 @@ export function AssistanceBar({
           </div>
         )}
 
-        {/* Monitoreo en Segundo Plano del Sistema */}
-        {systemsMode && systemName && (
-          <div
-            title={`Monitoreo en 2º plano del ${systemName}: ${systemProgress?.completed || 0} de ${systemProgress?.total || 0} hitos alcanzados`}
-            className="flex items-center gap-2 bg-indigo-950/60 border border-indigo-500/40 px-2.5 py-1.5 rounded-xl text-indigo-200 text-xs shadow-xs"
-          >
-            <Target size={14} className="text-indigo-400 shrink-0" />
-            <span className="font-bold text-slate-200 truncate max-w-[130px] sm:max-w-[170px]">
-              {systemName}
-            </span>
-            <span className="font-mono text-[11px] bg-indigo-900/50 px-1.5 py-0.2 rounded border border-indigo-700/50 text-indigo-300">
-              {systemProgress?.percent ?? 0}% Hitos
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="flex items-center gap-2.5 flex-wrap">

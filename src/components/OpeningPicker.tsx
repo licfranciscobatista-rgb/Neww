@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, Shield, Sword, Sparkles } from 'lucide-react';
-import { OPENING_PRESETS, DEFAULT_WHITE_SYSTEM, DEFAULT_BLACK_SYSTEM } from '../engine/openingIndex';
+import { OPENING_PRESETS, DEFAULT_WHITE_SYSTEM, DEFAULT_BLACK_SYSTEM, isSystemCompatibleWithColor } from '../engine/openingIndex';
 
 export function OpeningPicker({
   selected,
   userColor = 'w',
+  title = 'Sistemas de GarboChess',
+  preferencesOnly = false,
   onSelect,
   onClose,
 }: {
   selected: string;
   userColor?: 'w' | 'b';
+  title?: string;
+  preferencesOnly?: boolean;
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
@@ -41,7 +45,7 @@ export function OpeningPicker({
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="Sistemas y Aperturas de GarboChess"
+        aria-label={title}
         className="w-full max-w-lg max-h-[88vh] flex flex-col bg-slate-900 border border-emerald-500/50 rounded-2xl shadow-2xl overflow-hidden"
         onClick={event => event.stopPropagation()}
       >
@@ -49,7 +53,7 @@ export function OpeningPicker({
         <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/70">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>Sistemas de GarboChess</span>
+              <span>{title}</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 Tu bando: {userColor === 'w' ? 'Blancas' : 'Negras'}
               </span>
@@ -73,7 +77,7 @@ export function OpeningPicker({
         </header>
 
         {/* Tab Filters */}
-        <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 bg-slate-900 border-b border-slate-800/80">
+        {!preferencesOnly && <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 bg-slate-900 border-b border-slate-800/80">
           <button
             type="button"
             onClick={() => setFilterColor('w')}
@@ -111,32 +115,36 @@ export function OpeningPicker({
           >
             Todos
           </button>
-        </div>
+        </div>}
 
         {/* Quick Presets row */}
-        <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex items-center justify-between text-[11px]">
+        <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex flex-wrap gap-2 items-center justify-between text-[11px]">
           <span className="text-slate-400">Atajos rápidos:</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
+                if (!isSystemCompatibleWithColor(DEFAULT_WHITE_SYSTEM, userColor)) return;
                 onSelect(DEFAULT_WHITE_SYSTEM);
                 onClose();
               }}
-              className="text-amber-300 hover:underline font-medium flex items-center gap-1"
+              disabled={userColor !== 'w'}
+              className="text-amber-300 hover:underline font-medium flex items-center gap-1 disabled:opacity-30"
             >
-              <span>Forzar Londres (Blancas)</span>
+              <span>Favorito blancas · Londres</span>
             </button>
             <span className="text-slate-600">·</span>
             <button
               type="button"
               onClick={() => {
+                if (!isSystemCompatibleWithColor(DEFAULT_BLACK_SYSTEM, userColor)) return;
                 onSelect(DEFAULT_BLACK_SYSTEM);
                 onClose();
               }}
-              className="text-indigo-300 hover:underline font-medium flex items-center gap-1"
+              disabled={userColor !== 'b'}
+              className="text-indigo-300 hover:underline font-medium flex items-center gap-1 disabled:opacity-30"
             >
-              <span>Forzar India de Rey (Negras)</span>
+              <span>Favorito negras · India de Rey</span>
             </button>
           </div>
         </div>
@@ -159,18 +167,18 @@ export function OpeningPicker({
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold">Modo Libre (Auto-Detección tras Jugada 1)</span>
+                <span className="text-xs font-bold">Libre · Identificar sistema</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-700 text-slate-300">Dinámico</span>
               </div>
               <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
-                Juega tu primer movimiento libremente. GarboChess y Rodent IV estarán atentos tras la primera jugada para recomendarte y adoptar el sistema más adecuado a la partida.
+                El sistema se identifica según el desarrollo y la estructura de la posición.
               </p>
             </div>
             {selected === 'free' && <Check size={16} className="text-emerald-400 shrink-0 ml-2" />}
           </button>
 
           {/* Listado de Sistemas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          {!preferencesOnly && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
             {visiblePresets.map(item => {
               const isSelected = selected === item.id;
               const isWhite = item.color === 'w';
@@ -182,9 +190,11 @@ export function OpeningPicker({
                   type="button"
                   key={item.id}
                   onClick={() => {
+                    if (!isSystemCompatibleWithColor(item.id, userColor)) return;
                     onSelect(item.id);
                     onClose();
                   }}
+                  disabled={!isSystemCompatibleWithColor(item.id, userColor)}
                   aria-pressed={isSelected}
                   className={`p-2.5 rounded-xl text-left text-xs transition-all border flex flex-col justify-between gap-1.5 ${
                     isSelected
@@ -224,7 +234,7 @@ export function OpeningPicker({
                 </button>
               );
             })}
-          </div>
+          </div>}
         </div>
       </section>
     </div>,

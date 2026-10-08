@@ -22,6 +22,14 @@ self.onmessage = async event => {
   try {
     const module = await ready;
     active = job; scoreCp = 0; mate = undefined; depth = 0; pv = '';
+    const styles = {
+      agresivo: { OwnAttack: 150, OppAttack: 100, OwnMobility: 65, OppMobility: 45, PiecePressure: 135 },
+      solido: { OwnAttack: 95, OppAttack: 145, OwnMobility: 45, OppMobility: 65, PiecePressure: 100 },
+      dinamico: { OwnAttack: 110, OppAttack: 110, OwnMobility: 50, OppMobility: 50, PiecePressure: 109 },
+    };
+    for (const [name, value] of Object.entries(styles[job.personality] || styles.dinamico)) {
+      module.ccall('rodent_command', null, ['string'], [`setoption name ${name} value ${value}`]);
+    }
     module.ccall('rodent_command', null, ['string'], ['position fen ' + job.fen]);
     module.ccall('rodent_command', null, ['string'], ['go movetime ' + Math.min(500, Math.max(50, job.movetime || 150))]);
     active = null;

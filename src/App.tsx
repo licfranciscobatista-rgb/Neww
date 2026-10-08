@@ -37,6 +37,7 @@ import { realStockfish } from './engine/realStockfish';
 import { getReliableTheoryMoves, lookupTheory } from './engine/theoryBook';
 import { getDefaultSystemForColor, isSystemCompatibleWithColor } from './engine/openingIndex';
 import { getSystemAnalysis } from './engine/systemObjectives';
+import { identifySystem } from './engine/systemsCoordinator';
 import { cloneChessWithHistory } from './utils/chessClone';
 import { controlDirector, subDirector, GameReadinessReport } from './engine/controlDirector';
 import { verifyStartup } from './engine/startupVerification';
@@ -455,10 +456,8 @@ export function App() {
     supervisorRef.current?.setStockfishMode(mode, chess);
   }, [chess]);
 
-  const handleStartNewGame = (options: NewGameOptions) => {
-    if (!hasVerifiedOnceRef.current) {
-      void verifyEnginesBeforePlay();
-    }
+  const handleStartNewGame = async (options: NewGameOptions) => {
+    await verifyEnginesBeforePlay();
     setSystemsMode(options.systemsMode === true);
     setActiveTab('board');
     if (rodentSystem) setArrowFilter(previous => ({ ...previous, garbo: true }));
@@ -491,7 +490,7 @@ export function App() {
         // Negras -> kings-indian (Defensa India de Rey) o sistema compatible previamente seleccionado
         const currentSelected = supervisorState.garboOpening;
         const isCompatible = currentSelected && currentSelected !== 'free' && currentSelected !== 'rodent-active' && isSystemCompatibleWithColor(currentSelected, options.userColor);
-        const forcedSystem = isCompatible ? currentSelected : getDefaultSystemForColor(options.userColor);
+        const forcedSystem = currentSelected === 'free' || currentSelected === 'auto' ? currentSelected : isCompatible ? currentSelected : 'free';
         supervisorRef.current.setGarboOpening(forcedSystem, freshChess);
       } else if (supervisorState.garboOpening === 'rodent-active') {
         supervisorRef.current.setGarboOpening(previousGarboSystem, freshChess);
@@ -852,7 +851,7 @@ export function App() {
                   activeArrowFilter={systemsMode ? { ...arrowFilter, stockfish: false, personal: false, chessjs: false } : arrowFilter}
                   onToggleEngineFilter={handleToggleArrow}
                   isRivalTurn={isRivalTurn}
-                  rivalColorLabel={chess.turn() === 'w' ? 'Blancas' : 'Negras'}
+                  rivalColorLabel={userColor === 'w' ? 'Blancas' : 'Negras'}
                   indicatorStyle={systemsMode ? 'arrow' : boardIndicatorStyle}
                   onToggleIndicatorStyle={
                     systemsMode
@@ -880,12 +879,7 @@ export function App() {
 
                 {/* Segunda Barra: Asistencia de partida (Maia, Auditoría, Finales y Radar de Sistemas en 2º plano) */}
                 {(() => {
-                  const activeSys =
-                    supervisorState.garboOpening && supervisorState.garboOpening !== 'free' && supervisorState.garboOpening !== 'auto'
-                      ? supervisorState.garboOpening
-                      : userColor === 'b'
-                      ? 'kings-indian'
-                      : 'london';
+                  const activeSys = identifySystem(chess, userColor, supervisorState.garboOpening || 'free').id;
                   const sysAnalysis = systemsMode ? getSystemAnalysis(chess, activeSys) : null;
                   const completedMilestones = sysAnalysis?.milestones.filter((m) => m.status === 'completed').length || 0;
                   const totalMilestones = sysAnalysis?.milestones.length || 0;
@@ -954,9 +948,10 @@ export function App() {
                     onAccept={proposal => {
                       if (proposal.fen !== chess.fen() || proposal.sourceSystem !== supervisorState.garboOpening || chess.turn() !== userColor) return;
                       setPreviousGarboSystem(supervisorState.garboOpening || 'free');
-                      setRodentSystem(proposal.id);
-                      setArrowFilter(previous => ({ ...previous, garbo: false }));
-                      supervisorRef.current?.setGarboOpening('rodent-active', chess);
+                      if (!isSystemCompatibleWithColor(proposal.id, userColor)) return;
+                      setRodentSystem(null);
+                      setArrowFilter(previous => ({ ...previous, garbo: true }));
+                      supervisorRef.current?.setGarboOpening(proposal.id, chess);
                     }}
                     onResumeGarbo={() => {
                       setRodentSystem(null);
@@ -964,6 +959,7 @@ export function App() {
                       supervisorRef.current?.setGarboOpening(previousGarboSystem, chess);
                     }}
                     onChangeSystem={(id) => {
+                      if (!isSystemCompatibleWithColor(id, userColor)) return;
                       setRodentSystem(null);
                       setArrowFilter(previous => ({ ...previous, garbo: true }));
                       supervisorRef.current?.setGarboOpening(id, chess);
@@ -976,6 +972,7 @@ export function App() {
                   garboOpening={supervisorState.garboOpening}
                   garboOpeningState={supervisorState.garboOpeningState}
                   onChangeGarboOpening={(id) => {
+                    if (!isSystemCompatibleWithColor(id, userColor)) return;
                     setRodentSystem(null);
                     setArrowFilter(previous => ({ ...previous, garbo: true }));
                     supervisorRef.current?.setGarboOpening(id, chess);

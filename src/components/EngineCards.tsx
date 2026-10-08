@@ -73,7 +73,6 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
   const sfRec = recommendations.stockfish;
   const garboRec = recommendations.garbo;
   const [openingPickerOpen, setOpeningPickerOpen] = useState(false);
-  const [rejectedGarboSystem, setRejectedGarboSystem] = useState<string | null>(null);
   const garboStatusText = garboOpeningState?.notice ||
     (garboRec?.isBookMove ? 'Continuación del repertorio' : 'Cálculo independiente de Garbo');
   const maiaRec = recommendations.maia;
@@ -409,11 +408,11 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
                 <button
                   type="button"
                   onClick={() => setOpeningPickerOpen(true)}
-                  title="Configurar apertura o sistema"
+                  title="Preferencias iniciales de Garbo"
                   className="p-1.5 text-emerald-300 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 rounded border border-slate-700 transition-colors flex items-center gap-1 text-[11px] font-bold"
                 >
                   <Settings2 size={14} />
-                  <span>Cambiar</span>
+                  <span>Preferencias</span>
                 </button>
               </div>
             </div>
@@ -422,7 +421,7 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             <div className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-slate-950/60 border border-slate-800 my-2">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-emerald-400 font-bold truncate">
-                  {OPENING_PRESETS.find(p => p.id === garboOpening)?.name || (garboOpening === 'rodent-active' ? 'Rodent activo' : garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante')}
+                  {OPENING_PRESETS.find(p => p.id === (garboOpeningState?.activeSystem || garboOpening))?.name || (garboOpening === 'rodent-active' ? 'Rodent activo' : garboOpening === 'auto' ? 'Automática' : garboOpening === 'free' ? 'Libre' : getOpeningName(garboOpening) || 'Variante')}
                 </span>
                 {garboOpeningState?.detected && (
                   <span className="text-[9px] text-slate-400 font-mono truncate hidden sm:inline">
@@ -518,80 +517,15 @@ export const EngineCards: React.FC<EngineCardsProps> = ({
             )}
           </div>
 
-          {/* Sugerencia de Sistema tras el primer movimiento (Modo Libre) o por desvío de apertura */}
-          {!loadingStates.garbo && garboOpeningState?.suggestedSystem && rejectedGarboSystem !== garboOpening && (
-            <div className={`mt-2 border-t pt-2 text-xs ${
-              garboOpening === 'free'
-                ? 'border-emerald-500/50 bg-emerald-950/40 p-2.5 rounded-lg my-1'
-                : 'border-slate-700'
-            }`}>
-              {garboOpening === 'free' ? (
-                <div>
-                  <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>
-                      {chess.history().length >= 1
-                        ? `Sistema detectado tras jugada 1: ${garboOpeningState.suggestedSystem.name}`
-                        : `Sistema recomendado: ${garboOpeningState.suggestedSystem.name}`}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                    {garboOpeningState.suggestedSystem.reason ||
-                      'En Modo Sistemas, la partida no debe ir sin esquema. Adopta este sistema para sincronizar las metas estratégicas de Garbo y Rodent.'}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <button
-                      type="button"
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-transform active:scale-98 shadow-xs"
-                      onClick={() => {
-                        setRejectedGarboSystem(null);
-                        onChangeGarboOpening?.(garboOpeningState.suggestedSystem!.id);
-                      }}
-                    >
-                      ✓ Adoptar {garboOpeningState.suggestedSystem.name}
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700"
-                      onClick={() => setOpeningPickerOpen(true)}
-                    >
-                      Elegir otro
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-slate-300">Variante reconocida: <strong className="text-emerald-300">{garboOpeningState.suggestedSystem.name}</strong></p>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold"
-                      onClick={() => {
-                        setRejectedGarboSystem(null);
-                        onChangeGarboOpening?.(garboOpeningState.suggestedSystem!.id);
-                      }}
-                    >
-                      Adoptar {garboOpeningState.suggestedSystem.name}
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
-                      onClick={() => setRejectedGarboSystem(garboOpening)}
-                    >
-                      Mantener actual
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+
         </div>
         {openingPickerOpen && (
           <OpeningPicker
+            title="Preferencias iniciales de Garbo"
+            preferencesOnly
             selected={garboOpening}
             userColor={userColor}
             onSelect={id => {
-              setRejectedGarboSystem(null);
               onChangeGarboOpening?.(id);
             }}
             onClose={() => setOpeningPickerOpen(false)}

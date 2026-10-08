@@ -8,7 +8,7 @@ let terminated = 0;
 Module._load = function(request, parent, main) {
   if (parent?.filename.endsWith('startupVerification.ts')) {
     if (request === './auditWorkers') return { auditWorker: async name => { calls++; if (broken && name === 'garbo') throw new Error('Missing worker'); return { san: 'd4' }; } };
-    if (request === './realRodent') return { RealRodentManager: class { async analyze() { return broken ? null : { uci: 'd2d4' }; } terminate() { terminated++; } } };
+    if (request === './realRodent') return { RealRodentManager: class { async analyze() { return broken ? { uci: 'd2d4', source: 'fallback' } : { uci: 'd2d4', source: 'wasm' }; } terminate() { terminated++; } } };
     if (request === './realMaia') return { realMaia: { analyze: async () => broken ? null : { san: 'd4' } } };
     if (request === './personalAssistants') return { auditAllAssistantsHealth: () => Array.from({ length: 8 }, () => ({ isHealthy: !broken })) };
   }
@@ -38,6 +38,7 @@ const engines = Object.fromEntries(['stockfish', 'garbo', 'maia', 'personal'].ma
   assert.equal(degraded.engines.garbo.isOperational, false);
   assert.equal(degraded.engines.personal.isOperational, false);
   assert.ok(degraded.engines.maia.status.includes('heuristico'));
+  assert.ok(degraded.startupIssues.some(issue => issue.includes('Rodent') && issue.includes('no verificado')));
   assert.equal(calls, 5, 'Failed worker receives one retry');
   assert.equal(terminated, 2);
   assert.equal(base.engines.garbo.status, '', 'Base report is immutable');

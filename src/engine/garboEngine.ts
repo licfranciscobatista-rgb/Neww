@@ -5,6 +5,7 @@ import { realGarbo } from './realGarbo';
 import { queryOpening } from './openingService';
 import { OPENING_PRESETS, shouldPauseGarbo, detectRecommendedSystem, type OpeningChoice } from './openingIndex';
 import { continueLondon } from './londonPlanner';
+import { identifySystem, planSystem } from './systemsCoordinator';
 
 // Independent fallback for synchronous engine health checks, not live recommendations.
 export function runGarboRecommendation(chess: Chess): EngineRecommendation | null {
@@ -20,7 +21,7 @@ export function runGarboRecommendation(chess: Chess): EngineRecommendation | nul
   };
 }
 
-export async function analyzeGarbo(chess: Chess, selected: string): Promise<{
+export async function analyzeGarbo(chess: Chess, selected: string, userColor: 'w' | 'b' = chess.turn()): Promise<{
   rec: EngineRecommendation | null; opening: OpeningChoice;
 }> {
   const fen = chess.fen();
@@ -29,8 +30,31 @@ export async function analyzeGarbo(chess: Chess, selected: string): Promise<{
     return { rec: null, opening: { status: 'free', notice: 'Garbo apagado por cambio aceptado a Rodent.' } };
   }
   const history = chess.history({ verbose: true }).map(move => move.after);
-  const opening = await queryOpening(fen, selected, history);
+  const identification = identifySystem(chess, userColor, selected);
+  const effectiveSystem = identification.id;
+  const opening = await queryOpening(fen, effectiveSystem, history);
+  opening.activeSystem = effectiveSystem;
+  opening.provisional = identification.provisional;
+  if (selected === 'free' || selected === 'auto') {
+    opening.suggestedSystem = { id: effectiveSystem, name: identification.name, reason: identification.reason };
+    opening.isRecommendationPending = identification.provisional;
+  }
   const system = OPENING_PRESETS.find(item => item.id === selected)?.name || opening.name || 'el sistema elegido';
+
+  if (chess.turn() === userColor && (!opening.uci || chess.inCheck())) {
+    const plan = await planSystem(chess, effectiveSystem, position => realGarbo.analyze(position, { movetime: 100 }));
+    if (plan) {
+      opening.status = 'deviated';
+      opening.notice = plan.reason;
+      const move = new Chess(fen).move({ from: plan.move.slice(0, 2), to: plan.move.slice(2, 4), promotion: plan.move[4] });
+      return { opening, rec: { engine: 'garbo', engineName: `GarboChess (${identification.name})`, move: plan.move,
+        from: move.from, to: move.to, san: move.san, evaluation: plan.scoreCp / 100,
+        evalDisplay: (plan.scoreCp >= 0 ? '+' : '') + (plan.scoreCp / 100).toFixed(1), depth: plan.depth,
+        isBookMove: false, explanation: plan.reason, color: '#059669' } };
+    }
+    opening.notice = 'No se pudo comprobar una continuación del sistema. Sin recomendación inventada.';
+    return { opening: { ...opening, status: 'unavailable' }, rec: null };
+  }
 
   // 1. Si Londres sigue en plan activo y se desvía o hay jaque
   if (selected === 'london' && (!opening.uci || chess.inCheck())) {

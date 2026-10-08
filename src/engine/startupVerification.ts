@@ -21,7 +21,8 @@ export async function verifyStartup(base: GameReadinessReport): Promise<GameRead
   }
   const rodent = new RealRodentManager();
   try {
-    if (!await rodent.analyze(board.fen())) issues.push('Rodent: no respondio; sin cambio de sistema verificado.');
+    const result = await rodent.analyze(board.fen());
+    if (result?.source !== 'wasm') issues.push('Rodent: motor real no verificado; respaldo heuristico disponible si puede calcular la posicion.');
   } catch { issues.push('Rodent: error al cargar.'); }
   finally { rodent.terminate(); }
   let neural = null;

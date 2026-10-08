@@ -50,6 +50,8 @@ export interface OpeningChoice {
   notice?: string;
   suggestedSystem?: { id: string; name: string; reason?: string };
   isRecommendationPending?: boolean;
+  activeSystem?: string;
+  provisional?: boolean;
 }
 
 export function detectRecommendedSystem(

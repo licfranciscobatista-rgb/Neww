@@ -10,6 +10,7 @@ export interface RodentAnalysis {
   to?: string;
   san?: string;
   evalDisplay?: string;
+  source?: 'wasm' | 'fallback';
 }
 
 // Valores de piezas para evaluación posicional instantánea de respaldo
@@ -18,7 +19,7 @@ const CENTER_SQS = new Set(['d4', 'e4', 'd5', 'e5', 'c4', 'f4', 'c5', 'f5']);
 
 /**
  * Evaluador posicional y táctico de respaldo para Rodent IV:
- * Garantiza respuesta inmediata (<2ms) si el WebAssembly o Web Worker tarda o no responde.
+ * Respaldo limitado: material, legalidad y capturas inmediatas; no sustituye una busqueda profunda.
  */
 export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 'solido' | 'dinamico' = 'dinamico'): RodentAnalysis | null {
   try {
@@ -40,7 +41,8 @@ export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 's
           uci: `${m.from}${m.to}${m.promotion || ''}`,
           scoreCp: 100000,
           mate: 1,
-          depth: 6,
+          depth: 1,
+          source: 'fallback',
           pv: m.san,
           from: m.from,
           to: m.to,
@@ -49,11 +51,17 @@ export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 's
         };
       }
 
+      const side = board.turn();
+      for (const piece of testBoard.board().flat()) {
+        if (piece && piece.type !== 'k') score += (piece.color === side ? 1 : -1) * PIECE_VALS[piece.type];
+      }
+      const recaptures = testBoard.moves({ verbose: true }).filter(reply => reply.captured);
+      score -= Math.max(0, ...recaptures.map(reply => PIECE_VALS[reply.captured!]));
       // 2. Capturas con MVV-LVA
       if (m.captured) {
         const victimVal = PIECE_VALS[m.captured] || 100;
         const attackerVal = PIECE_VALS[m.piece] || 100;
-        score += victimVal * 2 - attackerVal * 0.2;
+        score += Math.min(25, victimVal * 0.05) - attackerVal * 0.01;
       }
 
       // 3. Jaques y amenazas
@@ -86,7 +94,7 @@ export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 's
         if (!m.captured && CENTER_SQS.has(m.from)) score -= 10;
       } else {
         // Dinámico: movilidad y casillas de salto
-        score += Math.random() * 8;
+        score += CENTER_SQS.has(m.to) ? 8 : 0;
       }
 
       if (score > bestScore) {
@@ -96,14 +104,15 @@ export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 's
     }
 
     const uci = `${bestMove.from}${bestMove.to}${bestMove.promotion || ''}`;
-    const scoreCp = Math.min(450, Math.max(-450, Math.round(bestScore / 2)));
+    const scoreCp = Math.round(bestScore);
     const pawns = (scoreCp / 100).toFixed(1);
     const evalDisplay = scoreCp > 0 ? `+${pawns}` : pawns;
 
     return {
       uci,
       scoreCp,
-      depth: 6,
+      depth: 1,
+      source: 'fallback',
       pv: bestMove.san,
       from: bestMove.from,
       to: bestMove.to,
@@ -118,7 +127,8 @@ export function evaluateRodentFallback(fen: string, personality: 'agresivo' | 's
 export class RealRodentManager {
   private worker: Worker | null = null;
   private nextId = 1;
-  private jobs = new Map<number, { resolve: (result: RodentAnalysis | null) => void; timer: ReturnType<typeof setTimeout>; fen: string }>();
+  private hasRealResult = false;
+  private jobs = new Map<number, { resolve: (result: RodentAnalysis | null) => void; timer: ReturnType<typeof setTimeout>; fen: string; personality: 'agresivo' | 'solido' | 'dinamico' }>();
 
   analyze(fen: string, movetime = 180, personality: 'agresivo' | 'solido' | 'dinamico' = 'dinamico'): Promise<RodentAnalysis | null> {
     const board = new Chess(fen);
@@ -133,10 +143,6 @@ export class RealRodentManager {
         };
         this.worker.onmessage = event => {
           const result = event.data;
-          if (result.error) {
-            console.warn('[Rodent] Error en análisis:', result.error);
-            return;
-          }
           const job = this.jobs.get(result.id);
           if (!job) return;
           clearTimeout(job.timer);
@@ -146,16 +152,18 @@ export class RealRodentManager {
             const c = new Chess(job.fen);
             const moveRes = c.move({ from: result.uci.slice(0, 2), to: result.uci.slice(2, 4), promotion: result.uci[4] });
             if (!moveRes) throw new Error('Illegal move');
+            this.hasRealResult = true;
             const pawns = (result.scoreCp / 100).toFixed(1);
             job.resolve({
               ...result,
+              source: 'wasm',
               from: moveRes.from,
               to: moveRes.to,
               san: moveRes.san,
               evalDisplay: result.scoreCp > 0 ? `+${pawns}` : pawns,
             });
           } catch {
-            job.resolve(evaluateRodentFallback(job.fen, personality));
+            job.resolve(evaluateRodentFallback(job.fen, job.personality));
           }
         };
       } catch {
@@ -176,11 +184,11 @@ export class RealRodentManager {
           this.jobs.delete(id);
           resolve(evaluateRodentFallback(fen, personality));
         }
-      }, 800);
+      }, this.hasRealResult ? 1200 : 5000);
 
-      this.jobs.set(id, { resolve, timer, fen });
+      this.jobs.set(id, { resolve, timer, fen, personality });
       try {
-        this.worker!.postMessage({ id, fen, movetime });
+        this.worker!.postMessage({ id, fen, movetime, personality });
       } catch {
         clearTimeout(timer);
         this.jobs.delete(id);
@@ -192,9 +200,10 @@ export class RealRodentManager {
   terminate() {
     this.worker?.terminate();
     this.worker = null;
+    this.hasRealResult = false;
     for (const job of this.jobs.values()) {
       clearTimeout(job.timer);
-      job.resolve(evaluateRodentFallback(job.fen));
+      job.resolve(evaluateRodentFallback(job.fen, job.personality));
     }
     this.jobs.clear();
   }

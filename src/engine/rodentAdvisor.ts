@@ -2,6 +2,8 @@ import { Chess } from 'chess.js';
 import { OPENING_PRESETS, type OpeningChoice } from './openingIndex';
 import { realRodent, type RodentAnalysis, evaluateRodentFallback } from './realRodent';
 import { SYSTEM_DETAILS_MAP } from './systemObjectives';
+import { planSystem, systemGoalScore, type SystemPlan, type SystemAnalyzer } from './systemsCoordinator';
+import { systemReply } from './systemReply';
 
 export interface RodentRecommendation {
   uci: string;
@@ -20,6 +22,8 @@ export interface RodentRecommendation {
   systemRole?: 'variante_alternativa' | 'consenso_sistema' | 'tactica_sistema';
   contrastWithGarbo?: string;
   isAlternativeToGarbo?: boolean;
+  systemPlan?: SystemPlan;
+  source?: 'wasm' | 'fallback';
 }
 
 export interface RivalThreatInfo {
@@ -64,14 +68,17 @@ export async function getLiveRodentRecommendation(
   board: Chess,
   personality: 'agresivo' | 'solido' | 'dinamico' = 'dinamico',
   selectedSystem = 'london',
-  garboMove?: { uci?: string; san?: string }
+  garboMove?: { uci?: string; san?: string },
+  cancelled = () => false
 ): Promise<RodentRecommendation | null> {
   if (board.isGameOver()) return null;
   const fen = board.fen();
 
   // Análisis rápido del motor
-  const analysis = await realRodent.analyze(fen, 180, personality) || evaluateRodentFallback(fen, personality);
-  if (!analysis) return null;
+  const systemPlan = await planSystem(board, selectedSystem,
+    position => realRodent.analyze(position, 100, personality), { alternativeTo: garboMove?.uci, cancelled });
+  if (!systemPlan) return null;
+  const analysis = { uci: systemPlan.move, scoreCp: systemPlan.scoreCp, depth: systemPlan.depth, source: systemPlan.source };
 
   const copy = new Chess(fen);
   let moveObj;
@@ -117,6 +124,11 @@ export async function getLiveRodentRecommendation(
     }
   }
 
+  if (systemPlan.gain <= 0) {
+    systemRole = 'tactica_sistema';
+    contrastWithGarbo = isSameAsGarbo ? `Ambos motores coinciden en ${san}. ${systemPlan.reason}`
+      : `Alternativa temporal ${san}. ${systemPlan.reason}`;
+  }
   // Generar título del plan y explicación rica según la personalidad de Rodent
   let planTitle = '';
   let explanation = '';
@@ -168,98 +180,53 @@ export async function getLiveRodentRecommendation(
     piece: pieceName,
     scoreCp,
     evalDisplay,
-    depth: analysis.depth || 6,
+    depth: analysis.depth,
     personality,
     planTitle,
-    explanation,
-    tacticalIntent,
+    explanation: systemPlan.reason,
+    tacticalIntent: systemPlan.reason,
     systemName,
     systemRole,
     contrastWithGarbo,
     isAlternativeToGarbo,
+    systemPlan,
+    source: analysis.source,
   };
 }
 
 /**
  * Detecta la amenaza o respuesta más peligrosa del rival en la posición actual.
  */
-export async function getLiveRivalThreat(board: Chess, selectedSystem = 'london'): Promise<RivalThreatInfo | null> {
+export async function getLiveRivalThreat(board: Chess, selectedSystem = 'london', userColor: 'w' | 'b' = board.turn(), plannedMove?: string): Promise<RivalThreatInfo | null> {
   if (board.isGameOver()) return null;
-
-  const legalMoves = board.moves({ verbose: true });
-  if (legalMoves.length === 0) return null;
-
-  // Analizar las réplicas del rival simulando una jugada
-  // Evaluamos las jugadas del bando contrario
-  const fen = board.fen();
-  const testBoard = new Chess(fen);
-  // Cambiamos turno artificialmente para ver qué jugaría el rival si fuera su turno ahora mismo
-  // (Análisis de amenaza estática / Null-move threat)
-  const tokens = fen.split(' ');
-  const rivalTurn = tokens[1] === 'w' ? 'b' : 'w';
-  tokens[1] = rivalTurn;
-  // Ajustar en passant si es inválido
-  tokens[3] = '-';
-  const rivalFen = tokens.join(' ');
-
-  try {
-    const rivalBoard = new Chess(rivalFen);
-    const rivalAnalysis = await realRodent.analyze(rivalFen, 120, 'agresivo') || evaluateRodentFallback(rivalFen, 'agresivo');
-    if (!rivalAnalysis) return null;
-
-    let threatMove;
-    try {
-      threatMove = rivalBoard.move({
-        from: rivalAnalysis.uci.slice(0, 2),
-        to: rivalAnalysis.uci.slice(2, 4),
-        promotion: rivalAnalysis.uci[4],
-      });
-    } catch {
-      const rm = rivalBoard.moves({ verbose: true });
-      threatMove = rm.find(m => m.captured) || rm[0];
-    }
-    if (!threatMove) return null;
-
-    const from = threatMove.from;
-    const to = threatMove.to;
-    const san = threatMove.san;
-    const uci = `${from}${to}${threatMove.promotion || ''}`;
-
-    let threatLevel: 'alta' | 'media' | 'baja' = 'media';
-    let explanation = '';
-    let prophylaxisTip = '';
-
-    if (threatMove.captured) {
-      threatLevel = 'alta';
-      explanation = `El rival busca capturar tu pieza en ${to.toUpperCase()} con ${san}.`;
-      prophylaxisTip = `Defiende la casilla ${to.toUpperCase()} o retira la pieza amenazada antes de que el rival consolide la ventaja.`;
-    } else if (rivalBoard.inCheck()) {
-      threatLevel = 'alta';
-      explanation = `Amenaza de jaque directo con ${san} que descolocaría a tu rey.`;
-      prophylaxisTip = `Anticípate cerrando la diagonal o columna de ataque con un desarrollo profiláctico.`;
-    } else if (['c5', 'e5', 'd5', 'c4', 'e4', 'd4'].includes(to)) {
-      threatLevel = 'media';
-      explanation = `El rival planea la ruptura central ${san} para desafiar tu estructura en el ${selectedSystem}.`;
-      prophylaxisTip = `Sostén el centro con peones de apoyo y mantén las piezas menores coordinadas.`;
-    } else {
-      threatLevel = 'baja';
-      explanation = `Posible maniobra de reagrupamiento rival con ${san}.`;
-      prophylaxisTip = `Continúa desarrollando tu plan estratégico sin descuidar el equilibrio de casillas débiles.`;
-    }
-
-    return {
-      uci,
-      from,
-      to,
-      san,
-      threatLevel,
-      explanation,
-      prophylaxisTip,
-    };
-  } catch {
-    return null;
-  }
+  if (board.turn() === userColor && !plannedMove) return null;
+  const result = await systemReply(board, board.turn() === userColor ? plannedMove || null : null,
+    fen => realRodent.analyze(fen, 100, 'agresivo'), selectedSystem);
+  if (!result?.arrow) return null;
+  return { uci: result.arrow.from + result.arrow.to, from: result.arrow.from, to: result.arrow.to,
+    san: result.text.match(/(?:respuesta|rival) (\S+):/)?.[1] || '', threatLevel: 'media',
+    explanation: result.text, prophylaxisTip: 'Comprueba esta respuesta antes de seguir el plan.' };
 }
+
+export async function proposeSaferSystem(board: Chess, current: SystemPlan, analyze: SystemAnalyzer,
+  cancelled = () => false): Promise<SystemProposal | null> {
+  if (!current.changeNeeded || current.source === 'fallback' || current.fen !== board.fen() || board.isGameOver()) return null;
+  const presets = OPENING_PRESETS.filter(p => p.color === board.turn() && p.id !== current.systemId)
+    .sort((a, b) => systemGoalScore(board, b.id) - systemGoalScore(board, a.id)).slice(0, 3);
+  const proposals: SystemProposal[] = [];
+  for (const preset of presets) {
+    if (cancelled()) return null;
+    const plan = await planSystem(board, preset.id, analyze, { cancelled });
+    if (!plan || plan.source === 'fallback' || plan.status === 'unrecoverable' || plan.gain <= 0 ||
+      plan.scoreCp < (current.status === 'unrecoverable' ? current.scoreCp - 15 : (current.systemScore ?? current.scoreCp) + 100) ||
+      plan.scoreCp < current.rootScore - 70) continue;
+    proposals.push({ id: preset.id, sourceSystem: current.systemId, name: preset.name, fen: board.fen(),
+      move: plan.move, san: plan.san, scoreCp: plan.scoreCp, comparisonCp: plan.scoreCp - current.scoreCp,
+      reason: current.status === 'unrecoverable' ? 'El esquema perdió una pieza esencial. Esta estructura alternativa es alcanzable sin añadir una pérdida comprobada.' : 'Estructura alcanzable y continuación comprobada; evita una pérdida frente a insistir en el esquema actual.' });
+  }
+  return proposals.sort((a, b) => b.scoreCp - a.scoreCp)[0] || null;
+}
+
 
 async function evaluateMove(board: Chess, uci: string, analyze: AnalyzeRodent): Promise<number | null> {
   const next = new Chess(board.fen());
